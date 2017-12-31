@@ -1,4 +1,4 @@
-package org.knime.expressions;
+package org.knime.expressions.playground;
 
 import javax.script.ScriptEngine;
 import javax.script.ScriptException;

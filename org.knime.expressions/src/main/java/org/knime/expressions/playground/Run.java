@@ -1,4 +1,4 @@
-package org.knime.expressions;
+package org.knime.expressions.playground;
 
 import java.util.concurrent.ExecutionException;
 
