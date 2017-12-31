@@ -1,4 +1,4 @@
-package org.knime.expressions;
+package org.knime.expressions.playground;
 
 import java.awt.BorderLayout;
 import java.awt.Dimension;
