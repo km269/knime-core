@@ -11,7 +11,6 @@ public class DeriveFieldNodeFactory extends NodeFactory<DeriveFieldNodeModel> {
      */
     @Override
     public DeriveFieldNodeModel createNodeModel() {
-        // TODO Auto-generated method stub
         return new DeriveFieldNodeModel();
     }
 
@@ -38,7 +37,6 @@ public class DeriveFieldNodeFactory extends NodeFactory<DeriveFieldNodeModel> {
      */
     @Override
     protected boolean hasDialog() {
-        // TODO Auto-generated method stub
         return true;
     }
 
@@ -47,8 +45,7 @@ public class DeriveFieldNodeFactory extends NodeFactory<DeriveFieldNodeModel> {
      */
     @Override
     protected NodeDialogPane createNodeDialogPane() {
-        // TODO Auto-generated method stub
-        return null;
+        return new DeriveFieldNodeDialog();
     }
 
 }
