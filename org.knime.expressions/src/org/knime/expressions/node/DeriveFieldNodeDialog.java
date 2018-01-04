@@ -54,8 +54,15 @@ import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.FocusEvent;
+import java.awt.event.FocusListener;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyVetoException;
+import java.beans.VetoableChangeListener;
+import java.util.Vector;
 
 import javax.swing.JButton;
+import javax.swing.JDialog;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
@@ -74,16 +81,19 @@ import org.knime.core.node.NodeSettingsWO;
 import org.knime.core.node.NotConfigurableException;
 
 /**
- *
- * @author Moritz Heine, KNIME GmbH, Konstanz, Germany
- */
-public class DeriveFieldNodeDialog extends NodeDialogPane {
+*
+* @author Moritz Heine, KNIME GmbH, Konstanz, Germany
+*/
+final class DeriveFieldNodeDialog extends NodeDialogPane {
 
+	/* Column identifiers that are shown in the table. */
+	private static final String[] COLUMN_IDENTIFIERS = new String[] { "Output Column", "Expression" };
+
+	/* Table holding the column names and the expressions. */
 	private final JTable m_table;
 	private DefaultTableModel m_tableModel;
 
-	private final String[] m_columnNames = new String[] { "Output Column", "Expression" };
-
+	/* Buttons to edit the table. */
 	private final JButton m_addButton;
 	private final JButton m_editButton;
 	private final JButton m_removeButton;
@@ -91,6 +101,8 @@ public class DeriveFieldNodeDialog extends NodeDialogPane {
 	private final JButton m_moveUpButton;
 	private final JButton m_moveDownButton;
 	private final JButton m_copyButton;
+
+	private final JDialog m_editDialog;
 
 	/* Listener to disable and enable buttons according to empty table. */
 	private final TableModelListener m_tableListener = new TableModelListener() {
@@ -121,20 +133,31 @@ public class DeriveFieldNodeDialog extends NodeDialogPane {
 			}
 		}
 	};
-	
+
 	/* ActionListener used for the buttons. */
 	private final ActionListener m_buttonListener = new ActionListener() {
-		private int m_rowCounter = 0;
+		private boolean m_moveEditDialog = true;
 
 		@Override
 		public void actionPerformed(ActionEvent e) {
+			/* Stop editing the cell if any button is clicked on. */
+			if (m_table.getCellEditor() != null) {
+				m_table.getCellEditor().stopCellEditing();
+			}
+
 			if (e.getSource().equals(m_addButton)) {
 				/* Add row at end and select it. */
-				m_tableModel.addRow(new String[] { "Col" + m_rowCounter++, "0" });
-				m_table.getSelectionModel().setSelectionInterval(m_table.getRowCount() - 1,
-						m_table.getRowCount() - 1);
+				m_tableModel.addRow(new String[] { "Col" + m_table.getRowCount(), "0" });
+				m_table.getSelectionModel().setSelectionInterval(m_table.getRowCount() - 1, m_table.getRowCount() - 1);
 			} else if (e.getSource().equals(m_editButton)) {
-				/* TODO: open dialog */
+				/* Ensures that the edit dialog is opened relative to the current panel for the first time. */
+				if (m_moveEditDialog) {
+					m_editDialog.setLocationRelativeTo(getPanel());
+					m_moveEditDialog = false;
+				}
+				m_editDialog.setVisible(true);
+				/* TODO: focus - modal but cant get the frame containing this pane. */
+				getPanel().getFocusCycleRootAncestor().setEnabled(false);
 			} else if (e.getSource().equals(m_copyButton)) {
 				/* Copy selected row and insert it after the selected one. */
 				m_tableModel.getValueAt(m_table.getSelectedRow(), 0);
@@ -153,35 +176,36 @@ public class DeriveFieldNodeDialog extends NodeDialogPane {
 			} else if (e.getSource().equals(m_removeAllButton)) {
 				/* Remove all rows by simply creating a new table model. */
 				m_tableModel = new DefaultTableModel();
-				m_tableModel.setColumnIdentifiers(m_columnNames);
+				m_tableModel.setColumnIdentifiers(COLUMN_IDENTIFIERS);
 				m_table.setModel(m_tableModel);
 
 				m_tableModel.addTableModelListener(m_tableListener);
 				m_tableListener.tableChanged(null);
-
-				m_rowCounter = 0;
 			} else if (e.getSource().equals(m_moveUpButton)) {
 				/* Move the selected row up. */
-				m_tableModel.moveRow(m_table.getSelectedRow(), m_table.getSelectedRow(),
-						m_table.getSelectedRow() - 1);
+				m_tableModel.moveRow(m_table.getSelectedRow(), m_table.getSelectedRow(), m_table.getSelectedRow() - 1);
 				m_table.getSelectionModel().setSelectionInterval(m_table.getSelectedRow() - 1,
 						m_table.getSelectedRow() - 1);
 			} else if (e.getSource().equals(m_moveDownButton)) {
 				/* Move the selected row down. */
-				m_tableModel.moveRow(m_table.getSelectedRow(), m_table.getSelectedRow(),
-						m_table.getSelectedRow() + 1);
+				m_tableModel.moveRow(m_table.getSelectedRow(), m_table.getSelectedRow(), m_table.getSelectedRow() + 1);
 				m_table.getSelectionModel().setSelectionInterval(m_table.getSelectedRow() + 1,
 						m_table.getSelectedRow() + 1);
 			}
 		}
 	};
 
+	/**
+	 * Constructor to create a new NodeDialog.
+	 */
 	public DeriveFieldNodeDialog() {
 		m_tableModel = new DefaultTableModel();
-		m_tableModel.setColumnIdentifiers(m_columnNames);
+		m_tableModel.setColumnIdentifiers(COLUMN_IDENTIFIERS);
 		m_table = new JTable(m_tableModel);
 		m_table.getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		m_tableModel.addTableModelListener(m_tableListener);
+
+		/* Listener to disable move up/down depending on the selected row. */
 		m_table.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
 
 			@Override
@@ -198,6 +222,9 @@ public class DeriveFieldNodeDialog extends NodeDialogPane {
 				}
 			}
 		});
+		
+		m_editDialog = new EditDialog(this);
+		m_editDialog.setVisible(false);
 
 		m_addButton = new JButton("Add");
 		m_editButton = new JButton("Edit...");
@@ -225,13 +252,18 @@ public class DeriveFieldNodeDialog extends NodeDialogPane {
 		initLayout();
 	}
 
+	/**
+	 * Initialize the dialog consisting of two parts: the table containing the
+	 * expression + column, and the buttons.
+	 */
 	private void initLayout() {
-		/* Panel consists of two parts: the table containing the expression + column, and the buttons. */
 		JPanel mainPanel = new JPanel(new GridBagLayout());
 		GridBagConstraints constraint = new GridBagConstraints();
 
 		constraint.gridx = 0;
 		constraint.gridy = 0;
+		constraint.weightx = 1;
+		constraint.weighty = 1;
 		constraint.fill = GridBagConstraints.BOTH;
 
 		mainPanel.add(new JScrollPane(m_table), constraint);
@@ -250,6 +282,8 @@ public class DeriveFieldNodeDialog extends NodeDialogPane {
 		subPanel.add(m_moveDownButton);
 
 		constraint.gridx++;
+		constraint.weightx = 0;
+		constraint.weighty = 0;
 		constraint.insets = new Insets(5, 5, 5, 5);
 		constraint.fill = GridBagConstraints.NONE;
 		constraint.anchor = GridBagConstraints.PAGE_START;
@@ -264,8 +298,31 @@ public class DeriveFieldNodeDialog extends NodeDialogPane {
 	 */
 	@Override
 	protected void saveSettingsTo(final NodeSettingsWO settings) throws InvalidSettingsException {
-		// TODO Auto-generated method stub
+		/* Stop possible editing cell. */
+		if (m_table.getCellEditor() != null) {
+			m_table.getCellEditor().stopCellEditing();
+		}
 
+		DeriveFieldNodeConfiguration configuration = new DeriveFieldNodeConfiguration();
+
+		Vector<?> table = m_tableModel.getDataVector();
+
+		/*
+		 * Transpose the matrix in such a way that the rows of the table are stored as
+		 * columns. This makes it easier to save the expression table. First row
+		 * contains the column names and the second row contains the expressions.
+		 */
+		String[][] tableContents = new String[2][table.size()];
+
+		for (int i = 0; i < table.size(); i++) {
+			Vector<?> row = (Vector<?>) table.get(i);
+
+			tableContents[0][i] = row.get(0).toString();
+			tableContents[1][i] = row.get(1).toString();
+		}
+
+		configuration.setExpressionTable(tableContents);
+		configuration.saveSettingsTo(settings);
 	}
 
 	/**
@@ -274,6 +331,69 @@ public class DeriveFieldNodeDialog extends NodeDialogPane {
 	@Override
 	protected void loadSettingsFrom(final NodeSettingsRO settings, final DataTableSpec[] specs)
 			throws NotConfigurableException {
+		DeriveFieldNodeConfiguration configuration = new DeriveFieldNodeConfiguration();
+
+		configuration.loadSettingsIntoDialog(settings);
+
+		String[][] expressions = configuration.getExpressionTable();
+
+		/*
+		 * Transpose the expression table s.t. first column contains column names and
+		 * second column contains expressions.
+		 */
+		if (expressions.length > 0) {
+			m_tableModel = new DefaultTableModel();
+			m_tableModel.setColumnIdentifiers(COLUMN_IDENTIFIERS);
+			m_table.setModel(m_tableModel);
+
+			m_tableModel.addTableModelListener(m_tableListener);
+			m_tableListener.tableChanged(null);
+
+			for (int i = 0; i < expressions[0].length; i++) {
+				m_tableModel.addRow(new String[] { expressions[0][i], expressions[1][i] });
+			}
+			
+			m_table.getSelectionModel().setSelectionInterval(0, 0);
+		}
+		
+		((EditDialog) m_editDialog).updateSnippet(specs[0], getAvailableFlowVariables());
+	}
+	
+	/**
+	 * Closes the edit dialog if it is still open.
+	 */
+	@Override
+	public void onClose() {
+        	cancelEditDialog();
+    }
+
+	/**
+	 * Sets the EditDialog invisible and re-enables the focus for the NodeDialog.
+	 */
+	void cancelEditDialog() {
+		m_editDialog.setVisible(false);
+		getPanel().getFocusCycleRootAncestor().setEnabled(true);
+	}
+
+	/**
+	 * Sets the EditDialog invisible, re-enables the focus for the NodeDialog, and
+	 * inserts the given expression at the selected row.
+	 * 
+	 * @param expression
+	 *            Expression to be set.
+	 */
+	void okEditDialog(String expression) {
+		m_editDialog.setVisible(false);
+		getPanel().getFocusCycleRootAncestor().setEnabled(true);
+
+		m_tableModel.setValueAt(expression, m_table.getSelectedRow(), 1);
+	}
+
+	/**
+	 * @return table containing the column names and expressions
+	 */
+	JTable getTable() {
+		return m_table;
 	}
 
 }
