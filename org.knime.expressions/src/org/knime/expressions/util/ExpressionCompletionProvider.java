@@ -42,99 +42,31 @@
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
  * ---------------------------------------------------------------------
- *
- * History
- *   31.12.2017 (Moritz): created
  */
-package org.knime.expressions.node;
+package org.knime.expressions.util;
 
-import java.io.File;
-import java.io.IOException;
-
-import org.knime.core.data.DataTableSpec;
-import org.knime.core.node.CanceledExecutionException;
-import org.knime.core.node.ExecutionMonitor;
-import org.knime.core.node.InvalidSettingsException;
-import org.knime.core.node.NodeModel;
-import org.knime.core.node.NodeSettingsRO;
-import org.knime.core.node.NodeSettingsWO;
+import org.knime.base.node.util.KnimeCompletionProvider;
 
 /**
 *
 * @author Moritz Heine, KNIME GmbH, Konstanz, Germany
 */
-public class DeriveFieldNodeModel extends NodeModel {
-
-	private DeriveFieldNodeConfiguration m_configuration;
+public class ExpressionCompletionProvider extends KnimeCompletionProvider {
 
 	/**
-	 * Empty constructor.
+	 * {@inheritDoc}
 	 */
-	public DeriveFieldNodeModel() {
-		super(1, 1);
+	@Override
+	public String escapeColumnName(String colName) {
+		return "$" + colName + "$";
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	protected DataTableSpec[] configure(final DataTableSpec[] inSpecs) throws InvalidSettingsException {
-		return inSpecs;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	protected void loadInternals(final File nodeInternDir, final ExecutionMonitor exec)
-			throws IOException, CanceledExecutionException {
-		// No internals to load
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	protected void saveInternals(final File nodeInternDir, final ExecutionMonitor exec)
-			throws IOException, CanceledExecutionException {
-		// No internals to save
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	protected void saveSettingsTo(final NodeSettingsWO settings) {
-		if (m_configuration != null) {
-			m_configuration.saveSettingsTo(settings);
-		}
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	protected void validateSettings(final NodeSettingsRO settings) throws InvalidSettingsException {
-		// TODO Auto-generated method stub
-
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	protected void loadValidatedSettingsFrom(final NodeSettingsRO settings) throws InvalidSettingsException {
-		m_configuration = new DeriveFieldNodeConfiguration();
-		m_configuration.loadSettingsInModel(settings);
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	protected void reset() {
-		// TODO Auto-generated method stub
-
+	public String escapeFlowVariableName(String varName) {
+		return "$$" + varName + "$$";
 	}
 
 }

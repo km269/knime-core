@@ -42,99 +42,107 @@
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
  * ---------------------------------------------------------------------
- *
- * History
- *   31.12.2017 (Moritz): created
  */
 package org.knime.expressions.node;
 
-import java.io.File;
-import java.io.IOException;
-
-import org.knime.core.data.DataTableSpec;
-import org.knime.core.node.CanceledExecutionException;
-import org.knime.core.node.ExecutionMonitor;
 import org.knime.core.node.InvalidSettingsException;
-import org.knime.core.node.NodeModel;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
 
 /**
-*
-* @author Moritz Heine, KNIME GmbH, Konstanz, Germany
-*/
-public class DeriveFieldNodeModel extends NodeModel {
+ *
+ * @author Moritz Heine, KNIME GmbH, Konstanz, Germany
+ */
+final class DeriveFieldNodeConfiguration {
 
-	private DeriveFieldNodeConfiguration m_configuration;
+	/*
+	 * 2D array storing the column names (first row) and the expressions (second
+	 * row).
+	 */
+	private String[][] m_expressionTable;
+
+	/* Keys used to store and save data. */
+	private static final String EXPRESSION_KEY = "expressions";
+	private static final String COLUMN_NAME_KEY = "columnNames";
 
 	/**
-	 * Empty constructor.
+	 * Saves settings stored in the configuration.
+	 * 
+	 * @param settings
+	 *            to save to.
 	 */
-	public DeriveFieldNodeModel() {
-		super(1, 1);
+	void saveSettingsTo(final NodeSettingsWO settings) {
+		settings.addStringArray(COLUMN_NAME_KEY, m_expressionTable[0]);
+		settings.addStringArray(EXPRESSION_KEY, m_expressionTable[1]);
 	}
 
 	/**
-	 * {@inheritDoc}
+	 * Loads settings into the model, uses default value if incomplete.
+	 * 
+	 * @param settings
+	 *            to load from.
 	 */
-	@Override
-	protected DataTableSpec[] configure(final DataTableSpec[] inSpecs) throws InvalidSettingsException {
-		return inSpecs;
-	}
+	void loadSettingsIntoDialog(final NodeSettingsRO settings) {
+		String[] colNames = null;
+		String[] expressions = null;
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	protected void loadInternals(final File nodeInternDir, final ExecutionMonitor exec)
-			throws IOException, CanceledExecutionException {
-		// No internals to load
-	}
+		try {
+			colNames = settings.getStringArray(COLUMN_NAME_KEY);
+			expressions = settings.getStringArray(EXPRESSION_KEY);
 
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	protected void saveInternals(final File nodeInternDir, final ExecutionMonitor exec)
-			throws IOException, CanceledExecutionException {
-		// No internals to save
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	protected void saveSettingsTo(final NodeSettingsWO settings) {
-		if (m_configuration != null) {
-			m_configuration.saveSettingsTo(settings);
+			m_expressionTable = new String[][] { colNames, expressions };
+		} catch (InvalidSettingsException e) {
+			m_expressionTable = new String[0][0];
 		}
 	}
 
 	/**
-	 * {@inheritDoc}
+	 * Sets the expression table containing column names and the expressions.
+	 * 
+	 * @param expressionTable
+	 *            2D array where the first row contains the column names and the
+	 *            second row contains the expressions.
 	 */
-	@Override
-	protected void validateSettings(final NodeSettingsRO settings) throws InvalidSettingsException {
-		// TODO Auto-generated method stub
+	void setExpressionTable(String[][] expressionTable) throws IllegalArgumentException {
+		if (expressionTable.length != 2) {
+			throw new IllegalArgumentException("Number of rows (" + expressionTable.length
+					+ ") of the provided expression table is not equal to 2.");
+		}
 
+		m_expressionTable = expressionTable;
 	}
 
 	/**
-	 * {@inheritDoc}
+	 * 
+	 * @return 2D array containing column names in the first row and expressions in
+	 *         the second row.
 	 */
-	@Override
-	protected void loadValidatedSettingsFrom(final NodeSettingsRO settings) throws InvalidSettingsException {
-		m_configuration = new DeriveFieldNodeConfiguration();
-		m_configuration.loadSettingsInModel(settings);
+	String[][] getExpressionTable() {
+		return m_expressionTable;
 	}
 
 	/**
-	 * {@inheritDoc}
+	 * Loads settings from the model, fails if incomplete.
+	 * 
+	 * @param settings
+	 *            to load from.
+	 * @throws InvalidSettingsException
 	 */
-	@Override
-	protected void reset() {
-		// TODO Auto-generated method stub
+	void loadSettingsInModel(NodeSettingsRO settings) throws InvalidSettingsException {
+		String[][] expressionTable = new String[2][];
 
+		try {
+			expressionTable[0] = settings.getStringArray(COLUMN_NAME_KEY);
+		} catch (InvalidSettingsException e) {
+			throw new InvalidSettingsException("No column names set.");
+		}
+
+		try {
+			expressionTable[1] = settings.getStringArray(EXPRESSION_KEY);
+		} catch (InvalidSettingsException e) {
+			throw new InvalidSettingsException("No expressions set.");
+		}
+
+		setExpressionTable(expressionTable);
 	}
-
 }
