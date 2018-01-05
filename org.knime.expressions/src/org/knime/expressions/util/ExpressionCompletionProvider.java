@@ -53,12 +53,15 @@ import org.knime.base.node.util.KnimeCompletionProvider;
 */
 public class ExpressionCompletionProvider extends KnimeCompletionProvider {
 
+	private static String ESCAPE_COLUMN_SYMBOL = "$";
+	private static String ESCAPE_FLOW_VARIABLE_SYMBOL = "$$";
+	
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
 	public String escapeColumnName(String colName) {
-		return "$" + colName + "$";
+		return ESCAPE_COLUMN_SYMBOL + colName + ESCAPE_COLUMN_SYMBOL;
 	}
 
 	/**
@@ -66,7 +69,23 @@ public class ExpressionCompletionProvider extends KnimeCompletionProvider {
 	 */
 	@Override
 	public String escapeFlowVariableName(String varName) {
-		return "$$" + varName + "$$";
+		return ESCAPE_FLOW_VARIABLE_SYMBOL + varName + ESCAPE_FLOW_VARIABLE_SYMBOL;
+	}
+	
+	/**
+	 * 
+	 * @return the escape symbol used for column names.
+	 */
+	public static String getEscapeColumnSymbol() {
+		return ESCAPE_COLUMN_SYMBOL;
+	}
+	
+	/**
+	 * 
+	 * @return the escape symbol used for flow variables.
+	 */
+	public static String getEscapeFlowVariableSymbol() {
+		return ESCAPE_FLOW_VARIABLE_SYMBOL;
 	}
 
 }
