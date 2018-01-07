@@ -43,59 +43,16 @@
  * -------------------------------------------------------------------
  *
  * History
- *   Mar 14, 2016 (wiswedel): created
+ *   20.11.2010 (meinl): created
  */
-package org.knime.core.data.container.storage;
+package org.knime.orc;
 
-import java.io.IOException;
-
-import org.knime.core.data.container.Buffer;
-import org.knime.core.data.container.CloseableRowIterator;
-import org.knime.core.data.filestore.internal.FileStoreHandlerRepository;
+import org.knime.testing.core.AbstractTestcaseCollector;
 
 /**
  *
- * @author wiswedel
- * @since 3.2
- * @noextend This class is not intended to be subclassed by clients.
- * @noreference This class is not intended to be referenced by clients.
+ * @author Thorsten Meinl, University of Konstanz
  */
-public abstract class AbstractTableStoreReader {
-
-    private FileStoreHandlerRepository m_fileStoreHandlerRepository;
-
-    /** @return the fileStoreHandlerRepository */
-    public final FileStoreHandlerRepository getFileStoreHandlerRepository() {
-        return m_fileStoreHandlerRepository;
-    }
-
-    /**
-     * @param fileStoreHandlerRepository the fileStoreHandlerRepository to set
-     */
-    public final void setFileStoreHandlerRepository(final FileStoreHandlerRepository fileStoreHandlerRepository) {
-        m_fileStoreHandlerRepository = fileStoreHandlerRepository;
-    }
-
-    public abstract TableStoreCloseableRowIterator iterator() throws IOException;
-
-    public static abstract class TableStoreCloseableRowIterator extends CloseableRowIterator {
-
-        private Buffer m_buffer;
-
-        /**
-         * @param buffer the buffer to set
-         */
-        public void setBuffer(final Buffer buffer) {
-            m_buffer = buffer;
-        }
-
-        /** {@inheritDoc} */
-        @Override
-        public final void close() {
-            m_buffer.clearIteratorInstance(this, true);
-        }
-
-        public abstract boolean performClose() throws IOException;
-    }
-
+public class OrcTestcaseCollector extends AbstractTestcaseCollector {
+    // yes, it is empty
 }

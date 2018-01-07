@@ -1,8 +1,7 @@
 /*
  * ------------------------------------------------------------------------
- *
- *  Copyright by KNIME GmbH, Konstanz, Germany
- *  Website: http://www.knime.org; Email: contact@knime.org
+ *  Copyright by KNIME AG, Zurich, Switzerland
+ *  Website: http://www.knime.com; Email: contact@knime.com
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License, Version 3, as
@@ -41,7 +40,7 @@
  *  propagated with or for interoperation with KNIME.  The owner of a Node
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
- * ---------------------------------------------------------------------
+ * -------------------------------------------------------------------
  *
  * History
  *   Mar 14, 2016 (wiswedel): created
@@ -65,6 +64,12 @@ import org.knime.core.node.NodeSettingsRO;
  * @noreference This class is not intended to be referenced by clients.
  */
 public abstract class AbstractTableStoreFormat {
+
+    /** @return non-blank short name shown in the preference page, e.g. "Default" or "Column Store (Apache XYZ)".*/
+    public abstract String getName();
+
+    /** @return file name suffix for temp files, e.g. 'bin' or 'orc'. */
+    public abstract String getFilenameSuffix();
 
     public abstract boolean accept(final DataTableSpec spec);
 

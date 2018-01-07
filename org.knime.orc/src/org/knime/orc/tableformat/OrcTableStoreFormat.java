@@ -1,8 +1,7 @@
 /*
  * ------------------------------------------------------------------------
- *
- *  Copyright by KNIME GmbH, Konstanz, Germany
- *  Website: http://www.knime.org; Email: contact@knime.org
+ *  Copyright by KNIME AG, Zurich, Switzerland
+ *  Website: http://www.knime.com; Email: contact@knime.com
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License, Version 3, as
@@ -41,7 +40,7 @@
  *  propagated with or for interoperation with KNIME.  The owner of a Node
  *  may freely choose the license terms applicable to such Node, including
  *  when such Node is propagated with or for interoperation with KNIME.
- * ---------------------------------------------------------------------
+ * -------------------------------------------------------------------
  *
  * History
  *   Mar 14, 2016 (wiswedel): created
@@ -81,6 +80,16 @@ public final class OrcTableStoreFormat extends AbstractTableStoreFormat {
         SUPPORTED_TYPES_MAP.put(DoubleCell.TYPE, OrcKNIMEType.DOUBLE);
         SUPPORTED_TYPES_MAP.put(IntCell.TYPE, OrcKNIMEType.INT);
         SUPPORTED_TYPES_MAP.put(LongCell.TYPE, OrcKNIMEType.LONG);
+    }
+
+    @Override
+    public String getName() {
+        return "Column Store (Apache ORC) - experimental";
+    }
+
+    @Override
+    public String getFilenameSuffix() {
+        return ".orc";
     }
 
     /** {@inheritDoc} */

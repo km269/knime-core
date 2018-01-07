@@ -456,8 +456,7 @@ public class Buffer implements KNIMEStreamConstants {
         m_fileStoreHandlerRepository = fileStoreHandler.getFileStoreHandlerRepository();
         m_spec = spec;
         AbstractTableStoreFormat storeFormat = TableStoreFormatRegistry.getInstance().getFormatFor(spec);
-                TableStoreFormatRegistry.getInstance().getPreferredTableStoreFormat();
-        AbstractTableStoreFormat prefFormat = TableStoreFormatRegistry.getInstance().getPreferredTableStoreFormat();
+        AbstractTableStoreFormat prefFormat = TableStoreFormatRegistry.getInstance().getInstanceTableStoreFormat();
         if (storeFormat == prefFormat) {
             LOGGER.debugWithFormat("Using table format %s", storeFormat.getClass().getName());
         } else {
@@ -539,6 +538,11 @@ public class Buffer implements KNIMEStreamConstants {
     /** @return Underlying binary file. */
     final File getBinFile() {
         return m_binFile;
+    }
+
+    /** @return the outputFormat, not null */
+    final AbstractTableStoreFormat getOutputFormat() {
+        return m_outputFormat;
     }
 
     /**
@@ -895,7 +899,7 @@ public class Buffer implements KNIMEStreamConstants {
     /** Creates temp file (m_binFile) and adds this buffer to shutdown hook. */
     private void ensureTempFileExists() throws IOException {
         if (m_binFile == null) {
-            m_binFile = DataContainer.createTempFile();
+            m_binFile = DataContainer.createTempFile(m_outputFormat.getFilenameSuffix());
             OPENBUFFERS.add(new WeakReference<Buffer>(this));
         }
     }
@@ -1491,7 +1495,6 @@ public class Buffer implements KNIMEStreamConstants {
             zipOut.setLevel(Deflater.NO_COMPRESSION);
         }
         zipOut.putNextEntry(new ZipEntry(ZIP_ENTRY_DATA));
-        CellClassInfo[] shortCutsLookup;
         if (!usesOutFile() || m_version < IVERSION) {
             // need to use new buffer since we otherwise write properties
             // of this buffer, which prevents it from further reading (version
@@ -1501,7 +1504,7 @@ public class Buffer implements KNIMEStreamConstants {
             try {
                 copy.initOutputWriter(new NonClosableOutputStream.Zip(zipOut));
             } catch (UnsupportedOperationException notSupported) {
-                tempFile = DataContainer.createTempFile();
+                tempFile = DataContainer.createTempFile(copy.m_outputFormat.getFilenameSuffix());
                 copy.initOutputWriter(tempFile);
             }
             int count = 1;
