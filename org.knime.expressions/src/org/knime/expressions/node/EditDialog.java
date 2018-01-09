@@ -51,12 +51,8 @@ import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.event.FocusEvent;
-import java.awt.event.FocusListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.awt.event.WindowFocusListener;
-import java.awt.event.WindowListener;
 import java.util.Map;
 
 import javax.swing.JButton;
@@ -192,7 +188,7 @@ final class EditDialog extends JDialog {
 		if (visible) {
 			int selectedRow = m_parent.getTable().getSelectedRow();
 
-			m_snippetPanel.setExpressions(m_parent.getTable().getModel().getValueAt(selectedRow, 1).toString());
+			m_snippetPanel.setExpressions(m_parent.getTable().getModel().getValueAt(selectedRow, DeriveFieldNodeDialog.getExpressionColumn()).toString());
 		}
 	}
 }

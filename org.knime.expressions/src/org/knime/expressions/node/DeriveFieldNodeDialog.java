@@ -54,14 +54,11 @@ import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.event.FocusEvent;
-import java.awt.event.FocusListener;
-import java.beans.PropertyChangeEvent;
-import java.beans.PropertyVetoException;
-import java.beans.VetoableChangeListener;
 import java.util.Vector;
 
+import javax.swing.DefaultCellEditor;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -73,7 +70,11 @@ import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
 import javax.swing.table.DefaultTableModel;
 
+import org.knime.base.data.aggregation.dialogutil.type.DataTypeNameSorter;
+import org.knime.core.data.DataCellFactory.FromSimpleString;
 import org.knime.core.data.DataTableSpec;
+import org.knime.core.data.DataType;
+import org.knime.core.data.DataTypeRegistry;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeDialogPane;
 import org.knime.core.node.NodeSettingsRO;
@@ -81,13 +82,29 @@ import org.knime.core.node.NodeSettingsWO;
 import org.knime.core.node.NotConfigurableException;
 
 /**
-*
-* @author Moritz Heine, KNIME GmbH, Konstanz, Germany
-*/
+ *
+ * @author Moritz Heine, KNIME GmbH, Konstanz, Germany
+ */
 final class DeriveFieldNodeDialog extends NodeDialogPane {
 
 	/* Column identifiers that are shown in the table. */
-	private static final String[] COLUMN_IDENTIFIERS = new String[] { "Output Column", "Expression" };
+	private static final String[] COLUMN_IDENTIFIERS = new String[] { "Type", "Output Column", "Expression" };
+
+	private static final int TYPE_COLUMN = 0;
+	private static final int NAME_COLUMN = 1;
+	private static final int EXPRESSION_COLUMN = 2;
+
+	private static DataType[] TYPES;
+
+	/*
+	 * Copied from org.knime.base.node.io.filereader.ColPropertyDialog Used for the
+	 * combobox to select resulting type.
+	 */
+	static {
+		TYPES = DataTypeRegistry.getInstance().availableDataTypes().stream()
+				.filter(d -> d.getCellFactory(null).orElse(null) instanceof FromSimpleString)
+				.sorted((a, b) -> a.getName().compareTo(b.getName())).toArray(DataType[]::new);
+	}
 
 	/* Table holding the column names and the expressions. */
 	private final JTable m_table;
@@ -137,6 +154,7 @@ final class DeriveFieldNodeDialog extends NodeDialogPane {
 	/* ActionListener used for the buttons. */
 	private final ActionListener m_buttonListener = new ActionListener() {
 		private boolean m_moveEditDialog = true;
+		private DataType m_defaultType;
 
 		@Override
 		public void actionPerformed(ActionEvent e) {
@@ -146,11 +164,24 @@ final class DeriveFieldNodeDialog extends NodeDialogPane {
 			}
 
 			if (e.getSource().equals(m_addButton)) {
+
+				/* Searches for default data type 'String' */
+				if (m_defaultType == null) {
+					for (DataType type : TYPES) {
+						if (type.toString().equals("String")) {
+							m_defaultType = type;
+						}
+					}
+				}
+
 				/* Add row at end and select it. */
-				m_tableModel.addRow(new String[] { "Col" + m_table.getRowCount(), "0" });
+				m_tableModel.addRow(new Object[] { m_defaultType, "Col" + m_table.getRowCount(), "0" });
 				m_table.getSelectionModel().setSelectionInterval(m_table.getRowCount() - 1, m_table.getRowCount() - 1);
 			} else if (e.getSource().equals(m_editButton)) {
-				/* Ensures that the edit dialog is opened relative to the current panel for the first time. */
+				/*
+				 * Ensures that the edit dialog is opened relative to the current panel for the
+				 * first time.
+				 */
 				if (m_moveEditDialog) {
 					m_editDialog.setLocationRelativeTo(getPanel());
 					m_moveEditDialog = false;
@@ -161,9 +192,10 @@ final class DeriveFieldNodeDialog extends NodeDialogPane {
 			} else if (e.getSource().equals(m_copyButton)) {
 				/* Copy selected row and insert it after the selected one. */
 				m_tableModel.getValueAt(m_table.getSelectedRow(), 0);
-				Object[] row = new Object[2];
-				row[0] = m_tableModel.getValueAt(m_table.getSelectedRow(), 0);
-				row[1] = m_tableModel.getValueAt(m_table.getSelectedRow(), 1);
+				Object[] row = new Object[3];
+				row[NAME_COLUMN] = m_tableModel.getValueAt(m_table.getSelectedRow(), NAME_COLUMN);
+				row[EXPRESSION_COLUMN] = m_tableModel.getValueAt(m_table.getSelectedRow(), EXPRESSION_COLUMN);
+				row[TYPE_COLUMN] = m_tableModel.getValueAt(m_table.getSelectedRow(), TYPE_COLUMN);
 
 				m_tableModel.insertRow(m_table.getSelectedRow() + 1, row);
 			} else if (e.getSource().equals(m_removeButton)) {
@@ -222,7 +254,15 @@ final class DeriveFieldNodeDialog extends NodeDialogPane {
 				}
 			}
 		});
-		
+
+		/*
+		 * Add a combobox containing the available knime data types. Obtain String as
+		 * the default type.
+		 */
+		JComboBox<DataType> comboBox = new JComboBox<>(TYPES);
+
+		m_table.getColumnModel().getColumn(0).setCellEditor(new DefaultCellEditor(comboBox));
+
 		m_editDialog = new EditDialog(this);
 		m_editDialog.setVisible(false);
 
@@ -312,16 +352,19 @@ final class DeriveFieldNodeDialog extends NodeDialogPane {
 		 * columns. This makes it easier to save the expression table. First row
 		 * contains the column names and the second row contains the expressions.
 		 */
-		String[][] tableContents = new String[2][table.size()];
+		String[][] tableContents = new String[COLUMN_IDENTIFIERS.length-1][table.size()];
+		DataType[] types = new DataType[table.size()];
 
 		for (int i = 0; i < table.size(); i++) {
 			Vector<?> row = (Vector<?>) table.get(i);
 
-			tableContents[0][i] = row.get(0).toString();
-			tableContents[1][i] = row.get(1).toString();
+			tableContents[EXPRESSION_COLUMN-1][i] = row.get(EXPRESSION_COLUMN).toString();
+			tableContents[NAME_COLUMN-1][i] = row.get(NAME_COLUMN).toString();
+			types[i] = (DataType) row.get(TYPE_COLUMN);
 		}
 
 		configuration.setExpressionTable(tableContents);
+		configuration.setDataTypes(types);
 		configuration.saveSettingsTo(settings);
 	}
 
@@ -336,6 +379,7 @@ final class DeriveFieldNodeDialog extends NodeDialogPane {
 		configuration.loadSettingsIntoDialog(settings);
 
 		String[][] expressions = configuration.getExpressionTable();
+		DataType[] types = configuration.getDataTypes();
 
 		/*
 		 * Transpose the expression table s.t. first column contains column names and
@@ -345,27 +389,28 @@ final class DeriveFieldNodeDialog extends NodeDialogPane {
 			m_tableModel = new DefaultTableModel();
 			m_tableModel.setColumnIdentifiers(COLUMN_IDENTIFIERS);
 			m_table.setModel(m_tableModel);
+			m_table.getColumnModel().getColumn(TYPE_COLUMN).setCellEditor(new DefaultCellEditor(new JComboBox<>(TYPES)));
 
 			m_tableModel.addTableModelListener(m_tableListener);
 			m_tableListener.tableChanged(null);
 
 			for (int i = 0; i < expressions[0].length; i++) {
-				m_tableModel.addRow(new String[] { expressions[0][i], expressions[1][i] });
+				m_tableModel.addRow(new Object[] {types[i], expressions[0][i], expressions[1][i] });
 			}
-			
+
 			m_table.getSelectionModel().setSelectionInterval(0, 0);
 		}
-		
+
 		((EditDialog) m_editDialog).updateSnippet(specs[0], getAvailableFlowVariables());
 	}
-	
+
 	/**
 	 * Closes the edit dialog if it is still open.
 	 */
 	@Override
 	public void onClose() {
-        	cancelEditDialog();
-    }
+		cancelEditDialog();
+	}
 
 	/**
 	 * Sets the EditDialog invisible and re-enables the focus for the NodeDialog.
@@ -386,7 +431,7 @@ final class DeriveFieldNodeDialog extends NodeDialogPane {
 		m_editDialog.setVisible(false);
 		getPanel().getFocusCycleRootAncestor().setEnabled(true);
 
-		m_tableModel.setValueAt(expression, m_table.getSelectedRow(), 1);
+		m_tableModel.setValueAt(expression, m_table.getSelectedRow(), EXPRESSION_COLUMN);
 	}
 
 	/**
@@ -396,4 +441,27 @@ final class DeriveFieldNodeDialog extends NodeDialogPane {
 		return m_table;
 	}
 
+	/**
+	 * 
+	 * @return index of the type column.
+	 */
+	public static int getTypeColumn() {
+		return TYPE_COLUMN;
+	}
+
+	/**
+	 * 
+	 * @return index of the name column.
+	 */
+	public static int getNameColumn() {
+		return NAME_COLUMN;
+	}
+
+	/**
+	 * 
+	 * @return index of the expression column.
+	 */
+	public static int getExpressionColumn() {
+		return EXPRESSION_COLUMN;
+	}
 }
