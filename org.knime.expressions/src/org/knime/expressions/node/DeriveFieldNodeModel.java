@@ -50,19 +50,37 @@ package org.knime.expressions.node;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Set;
 
+import org.knime.core.data.DataCell;
+import org.knime.core.data.DataCellFactory;
+import org.knime.core.data.DataColumnSpec;
+import org.knime.core.data.DataRow;
 import org.knime.core.data.DataTableSpec;
+import org.knime.core.data.DataTableSpecCreator;
+import org.knime.core.data.DataType;
+import org.knime.core.data.container.AbstractCellFactory;
+import org.knime.core.data.container.CellFactory;
+import org.knime.core.data.container.ColumnRearranger;
+import org.knime.core.data.container.SingleCellFactory;
+import org.knime.core.data.convert.datacell.JavaToDataCellConverterRegistry;
+import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.CanceledExecutionException;
+import org.knime.core.node.ExecutionContext;
 import org.knime.core.node.ExecutionMonitor;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeModel;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
+import org.knime.core.util.UniqueNameGenerator;
+import org.knime.expressions.util.ExpressionParser;
+import org.knime.expressions.util.SingleExpressionCellFactory;
 
 /**
-*
-* @author Moritz Heine, KNIME GmbH, Konstanz, Germany
-*/
+ *
+ * @author Moritz Heine, KNIME GmbH, Konstanz, Germany
+ */
 public class DeriveFieldNodeModel extends NodeModel {
 
 	private DeriveFieldNodeConfiguration m_configuration;
@@ -79,7 +97,23 @@ public class DeriveFieldNodeModel extends NodeModel {
 	 */
 	@Override
 	protected DataTableSpec[] configure(final DataTableSpec[] inSpecs) throws InvalidSettingsException {
-		return inSpecs;
+		if (m_configuration == null) {
+			throw new IllegalStateException("No configuration to determine table specs available.");
+		}
+
+		ColumnRearranger rearranger = createColumnRearranger(inSpecs[0], null);
+
+		return new DataTableSpec[] { rearranger.createSpec() };
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	protected BufferedDataTable[] execute(BufferedDataTable[] inData, ExecutionContext exec) throws Exception {
+		ColumnRearranger rearranger = createColumnRearranger(inData[0].getSpec(), exec);
+
+		return new BufferedDataTable[] { exec.createColumnRearrangeTable(inData[0], rearranger, exec) };
 	}
 
 	/**
@@ -135,6 +169,58 @@ public class DeriveFieldNodeModel extends NodeModel {
 	protected void reset() {
 		// TODO Auto-generated method stub
 
+	}
+
+	private final class DeriveFieldCellFactory extends AbstractCellFactory {
+
+		@Override
+		public DataCell[] getCells(DataRow row) {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+	}
+
+	private ColumnRearranger createColumnRearranger(DataTableSpec inSpec, ExecutionContext exec) {
+		ColumnRearranger rearranger = new ColumnRearranger(inSpec);
+
+		String[][] expressions = m_configuration.getExpressionTable();
+		DataType[] types = m_configuration.getDataTypes();
+
+		DataTableSpecCreator creator = new DataTableSpecCreator(inSpec);
+
+		/*
+		 * Used to replace columns and adding new columns in such a way that the column
+		 * names are still unique.
+		 */
+		UniqueNameGenerator replaceGenerator = new UniqueNameGenerator((Set<String>) null);
+		UniqueNameGenerator nameGenerator = new UniqueNameGenerator(inSpec);
+
+		HashMap<String, Integer> columnIndexMap = new HashMap<>(inSpec.getColumnNames().length);
+		for (String columnName : inSpec.getColumnNames()) {
+			columnIndexMap.put(columnName, inSpec.findColumnIndex(columnName));
+		}
+
+		/*
+		 * Iterate over all column names that are generated/replaced in the node and
+		 * append/replace them in the current spec.
+		 */
+		for (int i = 0; i < expressions[0].length; i++) {
+			if (columnIndexMap.containsKey(expressions[0][i])) {
+				int colIndex = columnIndexMap.get(expressions[0][i]);
+
+				rearranger.remove(colIndex);
+				rearranger.insertAt(colIndex,
+						new SingleExpressionCellFactory(replaceGenerator.newColumn(expressions[0][i], types[i]),
+								expressions[1][i], columnIndexMap, types[i], exec));
+			} else {
+				rearranger
+						.append(new SingleExpressionCellFactory(replaceGenerator.newColumn(expressions[0][i], types[i]),
+								expressions[1][i], columnIndexMap, types[i], exec));
+			}
+		}
+
+		return rearranger;
 	}
 
 }

@@ -3,7 +3,10 @@ Bundle-ManifestVersion: 2
 Bundle-Name: KNIME Expression Parser
 Bundle-SymbolicName: org.knime.expressions;singleton:=true
 Bundle-Version: 3.5.0.qualifier
-Bundle-ClassPath: .
+Bundle-ClassPath: .,
+ lib/groovy-all-2.4.13.jar,
+ lib/scijava-common-2.69.0.jar,
+ lib/scripting-groovy-0.2.6.jar
 Bundle-Vendor: KNIME AG, Zurich, Switzerland
 Require-Bundle: org.knime.base;bundle-version="[3.5.0,4.0.0)",
  org.knime.jsnippets;bundle-version="[3.5.0,4.0.0)",

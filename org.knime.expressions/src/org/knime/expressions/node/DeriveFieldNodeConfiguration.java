@@ -45,6 +45,7 @@
  */
 package org.knime.expressions.node;
 
+import org.knime.core.data.DataType;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
@@ -60,8 +61,10 @@ final class DeriveFieldNodeConfiguration {
 	 * row).
 	 */
 	private String[][] m_expressionTable;
+	private DataType[] m_dataTypes;
 
 	/* Keys used to store and save data. */
+	private static final String TYPE_KEY = "types";
 	private static final String EXPRESSION_KEY = "expressions";
 	private static final String COLUMN_NAME_KEY = "columnNames";
 
@@ -72,8 +75,9 @@ final class DeriveFieldNodeConfiguration {
 	 *            to save to.
 	 */
 	void saveSettingsTo(final NodeSettingsWO settings) {
-		settings.addStringArray(COLUMN_NAME_KEY, m_expressionTable[0]);
-		settings.addStringArray(EXPRESSION_KEY, m_expressionTable[1]);
+		settings.addStringArray(COLUMN_NAME_KEY, m_expressionTable[DeriveFieldNodeDialog.getNameColumn()-1]);
+		settings.addStringArray(EXPRESSION_KEY, m_expressionTable[DeriveFieldNodeDialog.getExpressionColumn()-1]);
+		settings.addDataTypeArray(TYPE_KEY, m_dataTypes);
 	}
 
 	/**
@@ -90,9 +94,11 @@ final class DeriveFieldNodeConfiguration {
 			colNames = settings.getStringArray(COLUMN_NAME_KEY);
 			expressions = settings.getStringArray(EXPRESSION_KEY);
 
-			m_expressionTable = new String[][] { colNames, expressions };
+			m_expressionTable = new String[][] {colNames, expressions };
+			m_dataTypes = settings.getDataTypeArray(TYPE_KEY);
 		} catch (InvalidSettingsException e) {
 			m_expressionTable = new String[0][0];
+			m_dataTypes = new DataType[0];
 		}
 	}
 
@@ -107,6 +113,8 @@ final class DeriveFieldNodeConfiguration {
 		if (expressionTable.length != 2) {
 			throw new IllegalArgumentException("Number of rows (" + expressionTable.length
 					+ ") of the provided expression table is not equal to 2.");
+		} else if(m_dataTypes != null && expressionTable[0].length != m_dataTypes.length) {
+			throw new IllegalArgumentException("The number of provided data types is not the same as the number of columns. ");
 		}
 
 		m_expressionTable = expressionTable;
@@ -132,17 +140,43 @@ final class DeriveFieldNodeConfiguration {
 		String[][] expressionTable = new String[2][];
 
 		try {
-			expressionTable[0] = settings.getStringArray(COLUMN_NAME_KEY);
+			expressionTable[DeriveFieldNodeDialog.getNameColumn()-1] = settings.getStringArray(COLUMN_NAME_KEY);
 		} catch (InvalidSettingsException e) {
 			throw new InvalidSettingsException("No column names set.");
 		}
 
 		try {
-			expressionTable[1] = settings.getStringArray(EXPRESSION_KEY);
+			expressionTable[DeriveFieldNodeDialog.getExpressionColumn()-1] = settings.getStringArray(EXPRESSION_KEY);
 		} catch (InvalidSettingsException e) {
 			throw new InvalidSettingsException("No expressions set.");
 		}
+		
+		try {
+			setDataTypes(settings.getDataTypeArray(TYPE_KEY));
+		} catch (InvalidSettingsException e) {
+			throw new InvalidSettingsException("No types set.");
+		}
 
 		setExpressionTable(expressionTable);
+	}
+
+	/**
+	 * 
+	 * @param dataTypeArray array containing the data types of the columns.
+	 */
+	public void setDataTypes(DataType[] dataTypeArray) {
+		if(m_expressionTable != null && m_expressionTable[0].length != dataTypeArray.length) {
+			throw new IllegalArgumentException("The number of provided data types is not the same as the number of columns. ");
+		}
+		
+		m_dataTypes = dataTypeArray;
+	}
+	
+	/**
+	 * 
+	 * @return the data types for each column.
+	 */
+	public DataType[] getDataTypes() {
+		return m_dataTypes;
 	}
 }
