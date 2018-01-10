@@ -138,7 +138,7 @@ public class SingleExpressionCellFactory extends SingleCellFactory {
 					.getConverterFactories(result.getClass(), m_resultType).iterator();
 			
 			if(!iter.hasNext()) {
-				throw new IllegalStateException("No Java to DataCell converter found.");
+				throw new IllegalStateException("No Java to DataCell converter found: " +result.getClass()+" to "+m_resultType.toPrettyString());
 			}
 
 			m_javaToDataCellConverter = ((JavaToDataCellConverterFactory) iter.next()).create(m_executionContext);

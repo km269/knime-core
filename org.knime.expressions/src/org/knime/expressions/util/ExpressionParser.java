@@ -46,6 +46,7 @@
  */
 package org.knime.expressions.util;
 
+import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -202,11 +203,12 @@ public class ExpressionParser {
 			m_expressionInvocableMap = new HashMap<>(expressions.length);
 		}
 
-		HashMap<String, ScriptEngine> tempInvocableMap = new HashMap<>(expressions.length);
+		HashMap<String, ScriptEngine> tempEngineMap = new HashMap<>(expressions.length);
 
 		for (int i = 0; i < expressions.length; i++) {
 			String expressionString = expressions[i];
-			String returnString = returnTypes[i].getName();
+			String returnString = ExpressionConverterUtils.extractJavaReturnString(returnTypes[i]);
+			String importString = ExpressionConverterUtils.getJavaImport(returnTypes[i]);
 			
 			if (!m_expressionMap.containsKey(expressionString)) {
 				throw new IllegalArgumentException(
@@ -222,10 +224,10 @@ public class ExpressionParser {
 				 * name of the main-method.
 				 */
 				String header = "//@INPUT " + ArrayUtils.toString(expression.getColumns(), "")
-						+ ArrayUtils.toString(expression.getFlowVariables(), "");
+						+ ArrayUtils.toString(expression.getFlowVariables(), "")+"\n";
 
-				/* TODO: strip returnString down to basic type. */
-				String script = header + "\n def "+returnString+" "+MAIN_METHOD+"(){" + expression.getParsedExpression() + "}";
+				
+				String script = header +importString+ "\n def "+returnString+" "+MAIN_METHOD+"(){" + expression.getParsedExpression() + "}";
 
 				ScriptLanguage language = new GroovyScriptLanguage();
 				ScriptEngine engine = language.getScriptEngine();
@@ -233,18 +235,16 @@ public class ExpressionParser {
 				try {
 					engine.eval(script);
 
-					tempInvocableMap.put(expressionString, engine);
+					tempEngineMap.put(expressionString, engine);
 				} catch (ScriptException e) {
-					// TODO analyze exception and return better error, i.e. strip exception down to
-					// line and error.
-					e.printStackTrace();
+					throw new IllegalStateException(e.toString());
 				}
 			} else {
-				tempInvocableMap.put(expressionString, m_expressionInvocableMap.get(expressionString));
+				tempEngineMap.put(expressionString, m_expressionInvocableMap.get(expressionString));
 			}
 		}
 
-		m_expressionInvocableMap = tempInvocableMap;
+		m_expressionInvocableMap = tempEngineMap;
 	}
 
 	public Object computeExpression(String expression, Object... input) {
@@ -258,9 +258,9 @@ public class ExpressionParser {
 		try {
 			return ((Invocable) engine).invokeFunction("mainStart");
 		} catch (NoSuchMethodException e) {
-			throw new IllegalStateException("Computation failed.");
+			throw new IllegalStateException("Computation failed: "+e.toString());
 		} catch (ScriptException e) {
-			throw new IllegalStateException("Computation failed.");
+			throw new IllegalStateException("Computation failed: "+e.toString());
 		}
 	}
 

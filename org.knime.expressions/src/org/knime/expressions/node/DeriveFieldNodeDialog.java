@@ -80,6 +80,7 @@ import org.knime.core.node.NodeDialogPane;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
 import org.knime.core.node.NotConfigurableException;
+import org.knime.expressions.util.ExpressionConverterUtils;
 
 /**
  *
@@ -93,18 +94,6 @@ final class DeriveFieldNodeDialog extends NodeDialogPane {
 	private static final int TYPE_COLUMN = 0;
 	private static final int NAME_COLUMN = 1;
 	private static final int EXPRESSION_COLUMN = 2;
-
-	private static DataType[] TYPES;
-
-	/*
-	 * Copied from org.knime.base.node.io.filereader.ColPropertyDialog Used for the
-	 * combobox to select resulting type.
-	 */
-	static {
-		TYPES = DataTypeRegistry.getInstance().availableDataTypes().stream()
-				.filter(d -> d.getCellFactory(null).orElse(null) instanceof FromSimpleString)
-				.sorted((a, b) -> a.getName().compareTo(b.getName())).toArray(DataType[]::new);
-	}
 
 	/* Table holding the column names and the expressions. */
 	private final JTable m_table;
@@ -167,7 +156,7 @@ final class DeriveFieldNodeDialog extends NodeDialogPane {
 
 				/* Searches for default data type 'String' */
 				if (m_defaultType == null) {
-					for (DataType type : TYPES) {
+					for (DataType type : ExpressionConverterUtils.possibleTypes()) {
 						if (type.toString().equals("String")) {
 							m_defaultType = type;
 						}
@@ -259,7 +248,7 @@ final class DeriveFieldNodeDialog extends NodeDialogPane {
 		 * Add a combobox containing the available knime data types. Obtain String as
 		 * the default type.
 		 */
-		JComboBox<DataType> comboBox = new JComboBox<>(TYPES);
+		JComboBox<DataType> comboBox = new JComboBox<>(ExpressionConverterUtils.possibleTypes());
 
 		m_table.getColumnModel().getColumn(0).setCellEditor(new DefaultCellEditor(comboBox));
 
@@ -389,7 +378,7 @@ final class DeriveFieldNodeDialog extends NodeDialogPane {
 			m_tableModel = new DefaultTableModel();
 			m_tableModel.setColumnIdentifiers(COLUMN_IDENTIFIERS);
 			m_table.setModel(m_tableModel);
-			m_table.getColumnModel().getColumn(TYPE_COLUMN).setCellEditor(new DefaultCellEditor(new JComboBox<>(TYPES)));
+			m_table.getColumnModel().getColumn(TYPE_COLUMN).setCellEditor(new DefaultCellEditor(new JComboBox<>(ExpressionConverterUtils.possibleTypes())));
 
 			m_tableModel.addTableModelListener(m_tableListener);
 			m_tableListener.tableChanged(null);
