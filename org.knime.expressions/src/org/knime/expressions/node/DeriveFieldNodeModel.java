@@ -54,18 +54,10 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Set;
 
-import org.knime.core.data.DataCell;
-import org.knime.core.data.DataCellFactory;
 import org.knime.core.data.DataColumnSpec;
-import org.knime.core.data.DataRow;
 import org.knime.core.data.DataTableSpec;
-import org.knime.core.data.DataTableSpecCreator;
 import org.knime.core.data.DataType;
-import org.knime.core.data.container.AbstractCellFactory;
-import org.knime.core.data.container.CellFactory;
 import org.knime.core.data.container.ColumnRearranger;
-import org.knime.core.data.container.SingleCellFactory;
-import org.knime.core.data.convert.datacell.JavaToDataCellConverterRegistry;
 import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
@@ -75,12 +67,12 @@ import org.knime.core.node.NodeModel;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
 import org.knime.core.util.UniqueNameGenerator;
-import org.knime.expressions.util.ExpressionParser;
 import org.knime.expressions.util.MultiExpressionCellFactory;
 import org.knime.expressions.util.SingleExpressionCellFactory;
 
 /**
- *
+ * Model used to compute new columns derived by expressions.
+ * 
  * @author Moritz Heine, KNIME GmbH, Konstanz, Germany
  */
 public class DeriveFieldNodeModel extends NodeModel {
@@ -151,8 +143,7 @@ public class DeriveFieldNodeModel extends NodeModel {
 	 */
 	@Override
 	protected void validateSettings(final NodeSettingsRO settings) throws InvalidSettingsException {
-		// TODO Auto-generated method stub
-
+		// Nothing to do
 	}
 
 	/**
@@ -169,20 +160,19 @@ public class DeriveFieldNodeModel extends NodeModel {
 	 */
 	@Override
 	protected void reset() {
-		// TODO Auto-generated method stub
-
+		// Nothing to do
 	}
 
-	private final class DeriveFieldCellFactory extends AbstractCellFactory {
-
-		@Override
-		public DataCell[] getCells(DataRow row) {
-			// TODO Auto-generated method stub
-			return null;
-		}
-
-	}
-
+	/**
+	 * Creates a {@link ColumnRearranger} used to determine the resulting
+	 * {@link DataColumnSpec} and providing code to fill it.
+	 * 
+	 * @param inSpec
+	 *            original input {@link DataTableSpec}
+	 * @param exec
+	 *            the current {@link ExecutionContext}
+	 * @return {@link ColumnRearranger} used to compute the output table.
+	 */
 	private ColumnRearranger createColumnRearranger(DataTableSpec inSpec, ExecutionContext exec) {
 		ColumnRearranger rearranger = new ColumnRearranger(inSpec);
 
@@ -208,7 +198,7 @@ public class DeriveFieldNodeModel extends NodeModel {
 		LinkedList<String> expressionList = new LinkedList<>();
 		LinkedList<DataColumnSpec> specList = new LinkedList<>();
 		LinkedList<DataType> typeList = new LinkedList<>();
-		
+
 		for (int i = 0; i < expressions[0].length; i++) {
 			if (columnIndexMap.containsKey(expressions[0][i])) {
 				/* Single cell factory used as we simply replace a column. */
@@ -217,7 +207,7 @@ public class DeriveFieldNodeModel extends NodeModel {
 				rearranger.remove(colIndex);
 				rearranger.insertAt(colIndex,
 						new SingleExpressionCellFactory(replaceGenerator.newColumn(expressions[0][i], types[i]),
-								expressions[1][i], columnIndexMap, types[i], exec));
+								expressions[1][i], columnIndexMap, types[i], getAvailableFlowVariables(), exec));
 			} else {
 				/* Multi cell factory used as we may append multiple columns. */
 				specList.add(appendGenerator.newColumn(expressions[0][i], types[i]));
@@ -225,18 +215,22 @@ public class DeriveFieldNodeModel extends NodeModel {
 				typeList.add(types[i]);
 			}
 		}
-		
-		if(!expressionList.isEmpty()) {
-			/* Create the multi cell factory if we don't simply replace already existing columns. */
+
+		if (!expressionList.isEmpty()) {
+			/*
+			 * Create the multi cell factory if we don't simply replace already existing
+			 * columns.
+			 */
 			String[] expressionArray = new String[expressionList.size()];
 			DataColumnSpec[] specArray = new DataColumnSpec[specList.size()];
 			DataType[] typeArray = new DataType[typeList.size()];
-			
+
 			expressionList.toArray(expressionArray);
 			specList.toArray(specArray);
 			typeList.toArray(typeArray);
-			
-			rearranger.append(new MultiExpressionCellFactory(specArray, expressionArray, columnIndexMap, typeArray, exec));
+
+			rearranger.append(new MultiExpressionCellFactory(specArray, expressionArray, columnIndexMap, typeArray,
+					getAvailableFlowVariables(), exec));
 		}
 
 		return rearranger;

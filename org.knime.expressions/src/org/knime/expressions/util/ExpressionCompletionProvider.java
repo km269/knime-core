@@ -45,23 +45,31 @@
  */
 package org.knime.expressions.util;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import org.fife.ui.autocomplete.BasicCompletion;
+import org.fife.ui.autocomplete.Completion;
 import org.knime.base.node.util.KnimeCompletionProvider;
+import org.knime.core.node.workflow.FlowVariable;
 
 /**
-*
-* @author Moritz Heine, KNIME GmbH, Konstanz, Germany
-*/
+ *
+ * @author Moritz Heine, KNIME GmbH, Konstanz, Germany
+ */
 public class ExpressionCompletionProvider extends KnimeCompletionProvider {
 
-	private static String ESCAPE_COLUMN_SYMBOL = "$";
-	private static String ESCAPE_FLOW_VARIABLE_SYMBOL = "$$";
-	
+	private static String ESCAPE_COLUMN_START_SYMBOL = "${";
+	private static String ESCAPE_COLUMN_END_SYMBOL = "}";
+	private static String ESCAPE_FLOW_VARIABLE_START_SYMBOL = "$[";
+	private static String ESCAPE_FLOW_VARIABLE_END_SYMBOL = "]";
+
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
 	public String escapeColumnName(String colName) {
-		return ESCAPE_COLUMN_SYMBOL + colName + ESCAPE_COLUMN_SYMBOL;
+		return ESCAPE_COLUMN_START_SYMBOL + colName + ESCAPE_COLUMN_END_SYMBOL;
 	}
 
 	/**
@@ -69,23 +77,53 @@ public class ExpressionCompletionProvider extends KnimeCompletionProvider {
 	 */
 	@Override
 	public String escapeFlowVariableName(String varName) {
-		return ESCAPE_FLOW_VARIABLE_SYMBOL + varName + ESCAPE_FLOW_VARIABLE_SYMBOL;
+		return ESCAPE_FLOW_VARIABLE_START_SYMBOL + varName + ESCAPE_FLOW_VARIABLE_END_SYMBOL;
+	}
+
+	/**
+	 * 
+	 * @return the escape start symbol used for column names.
+	 */
+	public static String getEscapeColumnStartSymbol() {
+		return ESCAPE_COLUMN_START_SYMBOL;
+	}
+
+	/**
+	 * 
+	 * @return the escape start symbol used for flow variables.
+	 */
+	public static String getEscapeFlowVariableStartSymbol() {
+		return ESCAPE_FLOW_VARIABLE_START_SYMBOL;
 	}
 	
 	/**
 	 * 
-	 * @return the escape symbol used for column names.
+	 * @return the escape end symbol used for column names.
 	 */
-	public static String getEscapeColumnSymbol() {
-		return ESCAPE_COLUMN_SYMBOL;
+	public static String getEscapeColumnEndSymbol() {
+		return ESCAPE_COLUMN_END_SYMBOL;
 	}
-	
+
 	/**
 	 * 
-	 * @return the escape symbol used for flow variables.
+	 * @return the escape start symbol used for flow variables.
 	 */
-	public static String getEscapeFlowVariableSymbol() {
-		return ESCAPE_FLOW_VARIABLE_SYMBOL;
+	public static String getEscapeFlowVariableEndSymbol() {
+		return ESCAPE_FLOW_VARIABLE_END_SYMBOL;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public void setFlowVariables(final Iterable<FlowVariable> variables) {
+		ArrayList<Completion> completionList = new ArrayList<>();
+
+		for (FlowVariable var : variables) {
+			completionList.add(new BasicCompletion(this,
+					ESCAPE_FLOW_VARIABLE_START_SYMBOL + var.getName() + ESCAPE_FLOW_VARIABLE_END_SYMBOL,
+					var.getType().toString(), "The flow variable " + var.getName() + "."));
+		}
 	}
 
 }

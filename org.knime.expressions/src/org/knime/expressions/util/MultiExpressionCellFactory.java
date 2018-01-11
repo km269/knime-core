@@ -57,6 +57,7 @@ import org.knime.core.data.container.AbstractCellFactory;
 import org.knime.core.data.convert.datacell.JavaToDataCellConverter;
 import org.knime.core.data.convert.java.DataCellToJavaConverter;
 import org.knime.core.node.ExecutionContext;
+import org.knime.core.node.workflow.FlowVariable;
 
 /**
  * 
@@ -68,13 +69,15 @@ public class MultiExpressionCellFactory extends AbstractCellFactory {
 	private final String[] m_expressions;
 	private final Map<String, Integer> m_columnNameIndexMap;
 	private final ExecutionContext m_executionContext;
+	private final Map<String, FlowVariable> m_flowVariableMap;
 
 	private HashMap<String, DataCellToJavaConverter<?, ?>[]> m_dataCellToJavaConverterMap;
 	@SuppressWarnings("rawtypes")
 	private HashMap<String, JavaToDataCellConverter> m_javaToDataCellConverterMap;
 
 	public MultiExpressionCellFactory(DataColumnSpec[] inSpec, String[] expressions,
-			Map<String, Integer> columnNameIndexMap, DataType[] resultTypes, ExecutionContext exec) {
+			Map<String, Integer> columnNameIndexMap, DataType[] resultTypes, Map<String, FlowVariable> flowVariables,
+			ExecutionContext exec) {
 		super(inSpec);
 
 		if (resultTypes.length != expressions.length) {
@@ -88,14 +91,17 @@ public class MultiExpressionCellFactory extends AbstractCellFactory {
 		m_expressionParser = new ExpressionParser();
 		m_expressions = expressions;
 		m_columnNameIndexMap = columnNameIndexMap;
+		m_flowVariableMap = flowVariables;
 		m_executionContext = exec;
+
 		m_dataCellToJavaConverterMap = new HashMap<>(expressions.length);
 		m_javaToDataCellConverterMap = new HashMap<>(expressions.length);
 
 		String[] columnNames = new String[columnNameIndexMap.size()];
 		columnNameIndexMap.keySet().toArray(columnNames);
 
-		m_expressionParser.parseExpressions(columnNames, expressions);
+		m_expressionParser.parseExpressions(columnNames,
+				ExpressionConverterUtils.extractFlowVariables(m_flowVariableMap), expressions);
 		m_expressionParser.checkExpressions(expressions, resultTypes);
 	}
 
@@ -107,6 +113,7 @@ public class MultiExpressionCellFactory extends AbstractCellFactory {
 	public DataCell[] getCells(DataRow row) {
 		DataCell[] returnCells = new DataCell[m_expressions.length];
 
+		/* Outer loop to iterate over the expressions and execute them. */
 		outerLoop: for (int j = 0; j < returnCells.length; j++) {
 			String expression = m_expressions[j];
 
@@ -119,16 +126,21 @@ public class MultiExpressionCellFactory extends AbstractCellFactory {
 
 				for (int i = 0; i < dataCellToJavaConverters.length; i++) {
 					DataCell cell = row.getCell(m_columnNameIndexMap.get(usedColumnNames[i]));
-					dataCellToJavaConverters[i] = ExpressionConverterUtils.getKnimeToJavaConverter(cell.getType());
+					dataCellToJavaConverters[i] = ExpressionConverterUtils.getDataCellToJavaConverter(cell.getType());
 				}
 
 				m_dataCellToJavaConverterMap.put(expression, dataCellToJavaConverters);
 			}
 
+			/* Get the input data used by the expression. */
 			for (int i = 0; i < cellData.length; i++) {
 				String column = usedColumnNames[i];
 				DataCell cell = row.getCell(m_columnNameIndexMap.get(column));
 
+				/*
+				 * Check if one of the input cells is missing. If so, return a missing cell.
+				 * TODO: let the script handle missing cells?
+				 */
 				if (cell.isMissing()) {
 					returnCells[j] = DataType.getMissingCell();
 					continue outerLoop;
@@ -142,7 +154,9 @@ public class MultiExpressionCellFactory extends AbstractCellFactory {
 				}
 			}
 
-			Object result = m_expressionParser.computeExpression(expression, cellData);
+			/* Execute expression and convert the result into the specified data type. */
+			Object result = m_expressionParser.computeExpression(expression,
+					ExpressionConverterUtils.extractFlowVariables(m_flowVariableMap), cellData);
 
 			if (!m_javaToDataCellConverterMap.containsKey(expression)) {
 				m_javaToDataCellConverterMap.put(expression,

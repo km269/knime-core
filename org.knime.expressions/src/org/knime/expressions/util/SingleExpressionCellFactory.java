@@ -46,18 +46,23 @@
  */
 package org.knime.expressions.util;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import org.knime.core.data.DataCell;
 import org.knime.core.data.DataColumnSpec;
 import org.knime.core.data.DataRow;
 import org.knime.core.data.DataType;
+import org.knime.core.data.container.CellFactory;
 import org.knime.core.data.container.SingleCellFactory;
 import org.knime.core.data.convert.datacell.JavaToDataCellConverter;
 import org.knime.core.data.convert.java.DataCellToJavaConverter;
 import org.knime.core.node.ExecutionContext;
+import org.knime.core.node.workflow.FlowVariable;
 
 /**
+ * A {@link SingleCellFactory} that produces {@link DataCell} based on a given
+ * expression that is being parsed and executed for each row.
  * 
  * @author Moritz Heine, KNIME GmbH, Konstanz, Germany
  */
@@ -65,26 +70,69 @@ public class SingleExpressionCellFactory extends SingleCellFactory {
 	private final ExpressionParser m_expressionParser;
 	private final String m_expression;
 	private final Map<String, Integer> m_columnNameIndexMap;
+	private final Map<String, FlowVariable> m_flowVariableMap;
 	private final ExecutionContext m_executionContext;
-	
+
 	private DataCellToJavaConverter<?, ?>[] m_dataCellToJavaConverters;
 	@SuppressWarnings("rawtypes")
 	private JavaToDataCellConverter m_javaToDataCellConverter;
-	
 
+	/**
+	 * Constructs a {@link CellFactory} adding a single column with the given
+	 * {@link DataType} by parsing the expression once and executing it for every
+	 * row.
+	 * 
+	 * @param inSpec
+	 *            the original {@link DataColumnSpec}.
+	 * @param expression
+	 *            that shall be parsed and executed.
+	 * @param columnNameIndexMap
+	 *            mapping from the column names to their indices.
+	 * @param resultType
+	 *            {@link DataType} the resulting column will have.
+	 * @param exec
+	 *            current {@link ExecutionContext}.
+	 */
 	public SingleExpressionCellFactory(DataColumnSpec inSpec, String expression,
 			Map<String, Integer> columnNameIndexMap, DataType resultType, ExecutionContext exec) {
+		this(inSpec, expression, columnNameIndexMap, resultType, null, exec);
+	}
+
+	/**
+	 * Constructs a {@link CellFactory} adding a single column with the given
+	 * {@link DataType} by parsing the expression once and executing it for every
+	 * row.
+	 * 
+	 * @param inSpec
+	 *            the original {@link DataColumnSpec}.
+	 * @param expression
+	 *            that shall be parsed and executed.
+	 * @param columnNameIndexMap
+	 *            mapping from the column names to their indices.
+	 * @param resultType
+	 *            {@link DataType} the resulting column will have.
+	 * @param flowVariables
+	 *            mapping from flow variable names to the actual
+	 *            {@link FlowVariable}.
+	 * @param exec
+	 *            current {@link ExecutionContext}.
+	 */
+	public SingleExpressionCellFactory(DataColumnSpec inSpec, String expression,
+			Map<String, Integer> columnNameIndexMap, DataType resultType, Map<String, FlowVariable> flowVariables,
+			ExecutionContext exec) {
 		super(inSpec);
 
 		m_expressionParser = new ExpressionParser();
 		m_expression = expression;
 		m_columnNameIndexMap = columnNameIndexMap;
 		m_executionContext = exec;
+		m_flowVariableMap = flowVariables;
 
 		String[] columnNames = new String[columnNameIndexMap.size()];
 		columnNameIndexMap.keySet().toArray(columnNames);
 
-		m_expressionParser.parseExpressions(columnNames, expression);
+		m_expressionParser.parseExpressions(columnNames, ExpressionConverterUtils.extractFlowVariables(flowVariables),
+				expression);
 		m_expressionParser.checkExpressions(new String[] { expression }, new DataType[] { resultType });
 	}
 
@@ -103,14 +151,19 @@ public class SingleExpressionCellFactory extends SingleCellFactory {
 
 			for (int i = 0; i < m_dataCellToJavaConverters.length; i++) {
 				DataCell cell = row.getCell(m_columnNameIndexMap.get(usedColumnNames[i]));
-				m_dataCellToJavaConverters[i] = ExpressionConverterUtils.getKnimeToJavaConverter(cell.getType());
+				m_dataCellToJavaConverters[i] = ExpressionConverterUtils.getDataCellToJavaConverter(cell.getType());
 			}
 		}
 
+		/* Get the input data used by the expression. */
 		for (int i = 0; i < cellData.length; i++) {
 			String column = usedColumnNames[i];
 			DataCell cell = row.getCell(m_columnNameIndexMap.get(column));
 
+			/*
+			 * Check if one of the input cells is missing. If so, return a missing cell.
+			 * TODO: let the script handle missing cells?
+			 */
 			if (cell.isMissing()) {
 				return DataType.getMissingCell();
 			}
@@ -123,7 +176,9 @@ public class SingleExpressionCellFactory extends SingleCellFactory {
 			}
 		}
 
-		Object result = m_expressionParser.computeExpression(m_expression, cellData);
+		/* Execute expression and convert the result into the specified data type. */
+		Object result = m_expressionParser.computeExpression(m_expression,
+				ExpressionConverterUtils.extractFlowVariables(m_flowVariableMap), cellData);
 
 		if (m_javaToDataCellConverter == null) {
 			m_javaToDataCellConverter = ExpressionConverterUtils.getJavaToDataCellConverter(result.getClass(),

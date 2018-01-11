@@ -45,15 +45,15 @@
  */
 package org.knime.expressions.util;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.Map;
 
 import org.knime.core.data.DataCell;
 import org.knime.core.data.DataCellFactory.FromSimpleString;
-import org.knime.core.data.container.CellFactory;
 import org.knime.core.data.DataType;
+import org.knime.core.data.container.CellFactory;
 import org.knime.core.data.convert.datacell.JavaToDataCellConverter;
 import org.knime.core.data.convert.datacell.JavaToDataCellConverterFactory;
 import org.knime.core.data.convert.datacell.JavaToDataCellConverterRegistry;
@@ -61,6 +61,8 @@ import org.knime.core.data.convert.java.DataCellToJavaConverter;
 import org.knime.core.data.convert.java.DataCellToJavaConverterFactory;
 import org.knime.core.data.convert.java.DataCellToJavaConverterRegistry;
 import org.knime.core.node.ExecutionContext;
+import org.knime.core.node.workflow.FlowVariable;
+import org.knime.core.node.workflow.FlowVariable.Type;
 
 /**
  * Utility class to obtain the preferred converters between {@link DataType} and
@@ -84,8 +86,8 @@ public class ExpressionConverterUtils {
 	private static DataType[] DATA_TYPES;
 
 	/* Maps holding the converters. */
-	private static HashMap<DataType, DataCellToJavaConverterFactory<?, ?>> KNIME_TO_JAVA_CONVERTER_MAP;
-	private static HashMap<Class<?>, JavaToDataCellConverterFactory<?>> JAVA_TO_KNIME_CONVERTER_MAP;
+	private static HashMap<DataType, DataCellToJavaConverterFactory<?, ?>> DATACELL_TO_JAVA_CONVERTER_MAP;
+	private static HashMap<Class<?>, JavaToDataCellConverterFactory<?>> JAVA_TO_DATACELL_CONVERTER_MAP;
 
 	static {
 		/* Retrieves the data types for which converters exist. */
@@ -93,8 +95,8 @@ public class ExpressionConverterUtils {
 				.filter(d -> d.getCellFactory(null).orElse(null) instanceof FromSimpleString)
 				.sorted((a, b) -> a.getName().compareTo(b.getName())).toArray(DataType[]::new);
 
-		KNIME_TO_JAVA_CONVERTER_MAP = new HashMap<>(DATA_TYPES.length);
-		JAVA_TO_KNIME_CONVERTER_MAP = new HashMap<>(DATA_TYPES.length);
+		DATACELL_TO_JAVA_CONVERTER_MAP = new HashMap<>(DATA_TYPES.length);
+		JAVA_TO_DATACELL_CONVERTER_MAP = new HashMap<>(DATA_TYPES.length);
 
 		/*
 		 * Used to store only data types for which converters exist in both directions,
@@ -110,7 +112,7 @@ public class ExpressionConverterUtils {
 			if (knimeToJavaIterator.hasNext()) {
 				DataCellToJavaConverterFactory<?, ?> knimeToJavaConverter = knimeToJavaIterator.next();
 
-				KNIME_TO_JAVA_CONVERTER_MAP.put(type, knimeToJavaConverter);
+				DATACELL_TO_JAVA_CONVERTER_MAP.put(type, knimeToJavaConverter);
 
 				Iterator<?> javaToKnimeIterator = JavaToDataCellConverterRegistry.getInstance()
 						.getConverterFactories(knimeToJavaConverter.getDestinationType(), type).iterator();
@@ -120,14 +122,17 @@ public class ExpressionConverterUtils {
 					JavaToDataCellConverterFactory<?> javaToKnimeConverter = (JavaToDataCellConverterFactory<?>) javaToKnimeIterator
 							.next();
 
-					JAVA_TO_KNIME_CONVERTER_MAP.put(knimeToJavaConverter.getDestinationType(), javaToKnimeConverter);
+					JAVA_TO_DATACELL_CONVERTER_MAP.put(knimeToJavaConverter.getDestinationType(), javaToKnimeConverter);
 
 					tempList.add(type);
 				}
 			}
 		}
 
-		/* Update the data types if converters don't exist in both directions for a specific type. */
+		/*
+		 * Update the data types if converters don't exist in both directions for a
+		 * specific type.
+		 */
 		if (tempList.size() < DATA_TYPES.length) {
 			DATA_TYPES = new DataType[tempList.size()];
 
@@ -153,10 +158,10 @@ public class ExpressionConverterUtils {
 	 *         type mapped to the provided {@link DataType}.
 	 */
 	public static String extractJavaReturnString(DataType type) {
-		if (!KNIME_TO_JAVA_CONVERTER_MAP.containsKey(type)) {
+		if (!DATACELL_TO_JAVA_CONVERTER_MAP.containsKey(type)) {
 			return "";
 		}
-		return KNIME_TO_JAVA_CONVERTER_MAP.get(type).getDestinationType().getName();
+		return DATACELL_TO_JAVA_CONVERTER_MAP.get(type).getDestinationType().getName();
 	}
 
 	/**
@@ -167,7 +172,7 @@ public class ExpressionConverterUtils {
 	 *         type.
 	 */
 	public static String getJavaImport(DataType type) {
-		return "import " + KNIME_TO_JAVA_CONVERTER_MAP.get(type).getDestinationType().getName() + ";\n";
+		return "import " + DATACELL_TO_JAVA_CONVERTER_MAP.get(type).getDestinationType().getName() + ";\n";
 	}
 
 	/**
@@ -184,11 +189,11 @@ public class ExpressionConverterUtils {
 	 *         converter or its reversing converter is not registered.
 	 */
 	public static JavaToDataCellConverter<?> getJavaToDataCellConverter(Class<?> javaClass, ExecutionContext context) {
-		if (!JAVA_TO_KNIME_CONVERTER_MAP.containsKey(javaClass)) {
+		if (!JAVA_TO_DATACELL_CONVERTER_MAP.containsKey(javaClass)) {
 			return null;
 		}
 
-		return JAVA_TO_KNIME_CONVERTER_MAP.get(javaClass).create(context);
+		return JAVA_TO_DATACELL_CONVERTER_MAP.get(javaClass).create(context);
 	}
 
 	/**
@@ -201,7 +206,37 @@ public class ExpressionConverterUtils {
 	 *         {@link DataType} to the preferred Java object. Returns {@code null}
 	 *         if such a converter or its reversing converter is not registered.
 	 */
-	public static DataCellToJavaConverter<?, ?> getKnimeToJavaConverter(DataType dataType) {
-		return KNIME_TO_JAVA_CONVERTER_MAP.get(dataType).create();
+	public static DataCellToJavaConverter<?, ?> getDataCellToJavaConverter(DataType dataType) {
+		return DATACELL_TO_JAVA_CONVERTER_MAP.get(dataType).create();
+	}
+
+	/**
+	 * Returns a map containing the actual values of the provided flow variable map.
+	 * 
+	 * @param flowVariableMap
+	 *            mappings of the flow variables containing the values.
+	 * @return Mapping of the variable names to their actual values. An empty map if
+	 *         the given map is {@code null}.
+	 */
+	public static HashMap<String, Object> extractFlowVariables(Map<String, FlowVariable> flowVariableMap) {
+		if (flowVariableMap == null) {
+			return new HashMap<>();
+		}
+
+		HashMap<String, Object> variableMap = new HashMap<>(flowVariableMap.size());
+
+		for (String variable : flowVariableMap.keySet()) {
+			FlowVariable var = flowVariableMap.get(variable);
+
+			if (var.getType() == Type.DOUBLE) {
+				variableMap.put(variable, var.getDoubleValue());
+			} else if (var.getType() == Type.INTEGER) {
+				variableMap.put(variable, var.getIntValue());
+			} else {
+				variableMap.put(variable, var.getStringValue());
+			}
+		}
+
+		return variableMap;
 	}
 }

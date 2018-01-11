@@ -47,6 +47,8 @@
 package org.knime.expressions.util;
 
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 
 import javax.script.Invocable;
 import javax.script.ScriptEngine;
@@ -55,6 +57,7 @@ import javax.script.ScriptException;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.knime.core.data.DataType;
+import org.knime.core.node.workflow.FlowVariable;
 import org.scijava.plugins.scripting.groovy.GroovyScriptLanguage;
 import org.scijava.script.ScriptLanguage;
 
@@ -68,7 +71,34 @@ public class ExpressionParser {
 	private HashMap<String, ScriptEngine> m_expressionInvocableMap;
 
 	/* TODO: Change exceptions to exceptions not parsed and parse exceptions. */
+
+	/**
+	 * Parses the expression(s) and replaces the usages of column names by their
+	 * actual names. Parsing already parsed expressions will do nothing but omit
+	 * expressions, which aren't provided as input.
+	 * 
+	 * @param columnNames
+	 *            all available column names.
+	 * @param expressions
+	 *            that shall be parsed.
+	 */
 	public void parseExpressions(String[] columnNames, String... expressions) {
+		this.parseExpressions(columnNames, null, expressions);
+	}
+
+	/**
+	 * Parses the expression and replaces the usages of flow variables and column
+	 * names by their actual names. Parsing already parsed expressions will do
+	 * nothing but omit expressions, which aren't provided as input.
+	 * 
+	 * @param columnNames
+	 *            all available column names.
+	 * @param flowVariableMap
+	 *            map containing the {@link FlowVariable}s.
+	 * @param expressions
+	 *            that shall be parsed.
+	 */
+	public void parseExpressions(String[] columnNames, Map<String, Object> flowVariableMap, String... expressions) {
 		if (m_expressionMap == null) {
 			m_expressionMap = new HashMap<>(expressions.length);
 		}
@@ -88,13 +118,15 @@ public class ExpressionParser {
 				 * Escape characters used to mark column names and flow variables in the
 				 * expression
 				 */
-				String escapeColumn = ExpressionCompletionProvider.getEscapeColumnSymbol();
-				String escapeFlowVariable = ExpressionCompletionProvider.getEscapeFlowVariableSymbol();
+				String escapeColumnStart = ExpressionCompletionProvider.getEscapeColumnStartSymbol();
+				String escapeColumnEnd = ExpressionCompletionProvider.getEscapeColumnEndSymbol();
+				String escapeFlowVariableStart = ExpressionCompletionProvider.getEscapeFlowVariableStartSymbol();
+				String escapeFlowVariableEnd = ExpressionCompletionProvider.getEscapeFlowVariableEndSymbol();
 
 				/*
 				 * Map flow variables/columns with their escape characters to their actual name.
 				 */
-				HashMap<String, String> flowVariableMap = new HashMap<>();
+				HashMap<String, String> variableMap = new HashMap<>();
 				HashMap<String, String> columnMap = new HashMap<>();
 
 				/*
@@ -104,77 +136,104 @@ public class ExpressionParser {
 				 */
 				String[] lines = StringUtils.split(expression, "\n");
 
+				/* Search for used column names using the escape characters. */
+				/*
+				 * TODO: inlined variables. Problem here: we check if column exist => for
+				 * inlined variables only possible at run time.
+				 */
 				for (int i = 0; i < lines.length; i++) {
 					int startIndex = 0;
 					String line = lines[i];
 
-					/*
-					 * As long as we find a starting delimiter we have to search for an ending
-					 * delimiter and check if the flow variable or column name exists.
-					 */
-					while ((startIndex = StringUtils.indexOf(line, escapeColumn, startIndex)) >= 0) {
-						int nextIndex = StringUtils.indexOf(line, escapeColumn, startIndex + 1);
+					/* Continue until we've read all start delimiters. */
+					while ((startIndex = StringUtils.indexOf(line, escapeColumnStart, startIndex)) >= 0) {
+						int endIndex = StringUtils.indexOf(line, escapeColumnEnd, startIndex + 1);
 
-						if (nextIndex < 0) {
+						if (endIndex < 0) {
 							throw new IllegalArgumentException(
 									"No such column: " + StringUtils.substring(line, startIndex + 1) + " (at line " + i
 											+ ") \n\n expression: \n" + expression);
 						}
 
-						if (nextIndex == startIndex + 1) {
+						/* Found a column name. */
+						String foundColumn = StringUtils.substring(line, startIndex,
+								endIndex + escapeColumnEnd.length());
+						String column = StringUtils.substring(foundColumn, escapeColumnStart.length(),
+								foundColumn.length() - escapeColumnEnd.length());
+
+						if (!ArrayUtils.contains(columnNames, column)) {
 							/*
-							 * We found the start of a flow variable. NOTE: this assumes that the escape
-							 * character is the same as for column names but occurs twice. Possible TODO
+							 * TODO: check previously added columns for derive field nodes. Rather do that
+							 * in the model itself.
 							 */
-							nextIndex = StringUtils.indexOf(expression, escapeFlowVariable, nextIndex + 1);
-
-							if (nextIndex < 0) {
-								throw new IllegalArgumentException(
-										"Invalid special identifier: " + StringUtils.substring(line, startIndex + 1)
-												+ " (at line " + i + ")  \n\n expression: \n" + expression);
-							}
-
-							/* TODO: check if flow variable exists. */
-
-							String foundVariable = StringUtils.substring(line, startIndex, nextIndex + 2);
-							String flowVariable = StringUtils.substring(foundVariable, 2, foundVariable.length() - 2);
-
-							flowVariableMap.put(foundVariable, flowVariable);
-
-							/*
-							 * Update startIndex for the next search so that we won't accidentally parse an
-							 * ending delimiter as a starting delimiter.
-							 */
-							startIndex = nextIndex + 2;
-						} else {
-							/* Found a column name. */
-							String foundColumn = StringUtils.substring(line, startIndex, nextIndex + 1);
-							String column = StringUtils.substring(foundColumn, 1, foundColumn.length() - 1);
-
-							if (!ArrayUtils.contains(columnNames, column)) {
-								/* TODO: check previously added columns for derive field nodes. */
-								throw new IllegalArgumentException(
-										"Colum '" + column + "' is not known. \n\n expression: \n" + expression);
-							}
-
-							columnMap.put(foundColumn, column);
-							startIndex = nextIndex + 1;
+							throw new IllegalArgumentException("Colum '" + column + "' in line "
+									+ " is not known. \n\nexpression:\n" + expression);
 						}
 
+						columnMap.put(foundColumn, column);
+
+						/* Update startIndex in case the end escape is the same as the start escape */
+						startIndex = endIndex + escapeColumnEnd.length();
+					}
+
+					startIndex = 0;
+
+					/* Continue until we've read all start delimiters. */
+					while ((startIndex = StringUtils.indexOf(line, escapeFlowVariableStart, startIndex)) >= 0) {
+						int endIndex = StringUtils.indexOf(line, escapeFlowVariableEnd, startIndex + 1);
+
+						if (endIndex < 0) {
+							throw new IllegalArgumentException(
+									"No such column: " + StringUtils.substring(line, startIndex + 1) + " (at line " + i
+											+ ") \n\n expression: \n" + expression);
+						}
+
+						String foundVariable = StringUtils.substring(line, startIndex,
+								endIndex + escapeFlowVariableEnd.length());
+						String flowVariable = StringUtils.substring(foundVariable, escapeColumnStart.length(),
+								foundVariable.length() - escapeFlowVariableEnd.length());
+
+						if (flowVariableMap == null || !flowVariableMap.containsKey(flowVariable)) {
+							throw new IllegalArgumentException("Flow variable '" + flowVariable + "' in line " + (i + 1)
+									+ " is not known. \n\nexpression:\n" + expression);
+						}
+
+						variableMap.put(foundVariable, flowVariable);
+
+						/* Update startIndex in case the end escape is the same as the start escape */
+						startIndex = endIndex + escapeFlowVariableEnd.length();
 					}
 				}
 
 				/*
 				 * Store the used flow variables, column names, the original expression and the
-				 * parsed expression (i.e. with removed delimiters) into the map.
+				 * parsed expression (i.e. with removed delimiters) into the map. Additionally
+				 * match the found columns/variables with their actual name so that we are able
+				 * to exchange these in the expression (and get rid of the escape delimiter).
 				 */
-				String[] flowVariables = new String[flowVariableMap.size()];
+				String[] foundVariables = new String[variableMap.size()];
+				String[] foundColumns = new String[columnMap.size()];
+				String[] flowVariables = new String[variableMap.size()];
 				String[] columns = new String[columnMap.size()];
 
-				flowVariableMap.values().toArray(flowVariables);
-				columnMap.values().toArray(columns);
+				Iterator<String> iter = variableMap.keySet().iterator();
+				int i = 0;
+				while (iter.hasNext()) {
+					foundVariables[i] = iter.next();
+					flowVariables[i] = variableMap.get(foundVariables[i]);
+					i++;
+				}
 
-				String parsedExpression = StringUtils.replace(expression, escapeColumn, "");
+				iter = columnMap.keySet().iterator();
+				i = 0;
+				while (iter.hasNext()) {
+					foundColumns[i] = iter.next();
+					columns[i] = columnMap.get(foundColumns[i]);
+					i++;
+				}
+
+				String parsedExpression = StringUtils.replaceEach(expression,
+						ArrayUtils.addAll(foundColumns, foundVariables), ArrayUtils.addAll(columns, flowVariables));
 
 				tempExpressionMap.put(expression,
 						new ParsedExpression(expression, parsedExpression, columns, flowVariables));
@@ -187,11 +246,25 @@ public class ExpressionParser {
 		m_expressionMap = tempExpressionMap;
 	}
 
+	/**
+	 * Checks the expression and appends necessary to evaluate the expression.
+	 * Checking already checked expressions will do nothing but uncheck the
+	 * expressions that aren't provided as input. Note that an expression has to be
+	 * parsed prior to checking it
+	 * ({@link #parseExpressions(String[], Map, String...)}).
+	 * 
+	 * @param expressions
+	 *            that shall be parsed.
+	 * @param returnTypes
+	 *            array of {@link DataType} describing the expected return types of
+	 *            the expressions.
+	 */
 	public void checkExpressions(String[] expressions, DataType[] returnTypes) {
 		if (m_expressionMap == null) {
 			throw new IllegalStateException("Expressions have do be parsed before checking.");
-		} else if(expressions.length != returnTypes.length) {
-			throw new IllegalStateException("Number of expressions ("+expressions.length+") does not match number of return types ("+returnTypes.length+").");
+		} else if (expressions.length != returnTypes.length) {
+			throw new IllegalStateException("Number of expressions (" + expressions.length
+					+ ") does not match number of return types (" + returnTypes.length + ").");
 		}
 
 		if (m_expressionInvocableMap == null) {
@@ -204,7 +277,7 @@ public class ExpressionParser {
 			String expressionString = expressions[i];
 			String returnString = ExpressionConverterUtils.extractJavaReturnString(returnTypes[i]);
 			String importString = ExpressionConverterUtils.getJavaImport(returnTypes[i]);
-			
+
 			if (!m_expressionMap.containsKey(expressionString)) {
 				throw new IllegalArgumentException(
 						"The following expression has not been parsed: \n" + expressionString);
@@ -215,18 +288,28 @@ public class ExpressionParser {
 				ParsedExpression expression = m_expressionMap.get(expressionString);
 
 				/*
-				 * TODO: introduce statics for input and method name -> important to forbid the
-				 * name of the main-method.
+				 * Scijava wants '//@INPUT variableName, ...' to define input variables.
+				 * Otherwise during evaluation it doesn't know where they come from.
 				 */
 				String header = "//@INPUT " + ArrayUtils.toString(expression.getColumns(), "")
-						+ ArrayUtils.toString(expression.getFlowVariables(), "")+"\n";
+						+ ArrayUtils.toString(expression.getFlowVariables(), "") + "\n";
 
-				
-				String script = header +importString+ "\n def "+returnString+" "+MAIN_METHOD+"(){" + expression.getParsedExpression() + "}";
+				/*
+				 * Wrap the expression in own 'main' method so that we are able to invoke it
+				 * later on instead of always re-evaluating the script.
+				 */
+				String script = header + importString + "\n def " + returnString + " " + MAIN_METHOD + "(){"
+						+ expression.getParsedExpression() + "}";
 
+				/* Get the used script language and script engine. */
 				ScriptLanguage language = new GroovyScriptLanguage();
 				ScriptEngine engine = language.getScriptEngine();
 
+				/*
+				 * Evaluates the script and caches the engine. Using this engine as an Invocable
+				 * we are able to invoke the method rather than re-evaluating the script each
+				 * time.
+				 */
 				try {
 					engine.eval(script);
 
@@ -242,23 +325,89 @@ public class ExpressionParser {
 		m_expressionInvocableMap = tempEngineMap;
 	}
 
-	public Object computeExpression(String expression, Object... input) {
+	/**
+	 * Computes the given expression and returns the result of the computation. The
+	 * expression has to be parsed ({@link #parseExpressions(String[], String...)})
+	 * and checked ({@link #checkExpressions(String[], DataType[])}) prior to
+	 * evaluation.
+	 * 
+	 * @param expression
+	 *            that shall be computed.
+	 * @param input
+	 *            the inputs used by the expression.
+	 * @return result of the computation.
+	 */
+	public Object computeExpression(String expression, Object input) {
+		return this.computeExpression(expression, null, input);
+	}
+
+	/**
+	 * Computes the given expression and returns the result of the computation. The
+	 * expression has to be parsed
+	 * ({@link #parseExpressions(String[], Map, String...)}) and checked
+	 * ({@link #checkExpressions(String[], DataType[])}) prior to evaluation.
+	 * 
+	 * @param expression
+	 *            that shall be computed.
+	 * @param flowVariableMap
+	 *            mapping from flow variable names to the actual
+	 *            {@link FlowVariable}s.
+	 * @param input
+	 *            the inputs used by the expression. If no input names have been
+	 *            found in the expression, this parameter will be ignored.
+	 * @return result of the computation.
+	 */
+	public Object computeExpression(String expression, Map<String, ?> flowVariableMap, Object... input) {
 		ScriptEngine engine = m_expressionInvocableMap.get(expression);
 		String[] columns = m_expressionMap.get(expression).getColumns();
+		String[] flowVariables = m_expressionMap.get(expression).getFlowVariables();
 
+		/*
+		 * Checks if we have the right number of input and flow variables if necessary.
+		 */
+		if (input == null && columns != null) {
+			throw new IllegalArgumentException("The input parameters are missing.");
+		} else if (columns.length != 0 && columns.length != input.length) {
+			throw new IllegalArgumentException("The number of input parameters (" + input.length
+					+ ") does not match the expected number (" + columns.length + ")");
+		}
+		if (flowVariables.length != 0 && flowVariableMap == null) {
+			throw new IllegalArgumentException("No flow variables have been provided.");
+		}
+
+		/* Provide the input (columns) to the expression. */
 		for (int i = 0; i < columns.length; i++) {
 			engine.put(columns[i], input[i]);
 		}
-		
+
+		for (String flowVariable : flowVariables) {
+			if (!flowVariableMap.containsKey(flowVariable)) {
+				throw new IllegalStateException("The flow variable '" + flowVariable + "' cannot be found.");
+			}
+
+			engine.put(flowVariable, flowVariableMap.get(flowVariable));
+		}
+
+		/*
+		 * Invoke the previously defined 'main' function. This is faster than
+		 * engine.eval(...)
+		 */
 		try {
 			return ((Invocable) engine).invokeFunction("mainStart");
 		} catch (NoSuchMethodException e) {
-			throw new IllegalStateException("Computation failed: "+e.toString());
+			throw new IllegalStateException("Computation failed: " + e.toString());
 		} catch (ScriptException e) {
-			throw new IllegalStateException("Computation failed: "+e.toString());
+			throw new IllegalStateException("Computation failed: " + e.toString());
 		}
 	}
 
+	/**
+	 * Returns the column names used in the given expression.
+	 * 
+	 * @param expression
+	 *            the expression for which column names shall be returned.
+	 * @return the column names.
+	 */
 	public String[] getUsedColumnNames(String expression) {
 		if (!m_expressionMap.containsKey(expression)) {
 			throw new IllegalStateException("Given Expression has not been parsed yet.");
