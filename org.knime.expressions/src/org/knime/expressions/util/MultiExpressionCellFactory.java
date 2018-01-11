@@ -46,13 +46,14 @@
  */
 package org.knime.expressions.util;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import org.knime.core.data.DataCell;
 import org.knime.core.data.DataColumnSpec;
 import org.knime.core.data.DataRow;
 import org.knime.core.data.DataType;
-import org.knime.core.data.container.SingleCellFactory;
+import org.knime.core.data.container.AbstractCellFactory;
 import org.knime.core.data.convert.datacell.JavaToDataCellConverter;
 import org.knime.core.data.convert.java.DataCellToJavaConverter;
 import org.knime.core.node.ExecutionContext;
@@ -61,31 +62,41 @@ import org.knime.core.node.ExecutionContext;
  * 
  * @author Moritz Heine, KNIME GmbH, Konstanz, Germany
  */
-public class SingleExpressionCellFactory extends SingleCellFactory {
+public class MultiExpressionCellFactory extends AbstractCellFactory {
+
 	private final ExpressionParser m_expressionParser;
-	private final String m_expression;
+	private final String[] m_expressions;
 	private final Map<String, Integer> m_columnNameIndexMap;
 	private final ExecutionContext m_executionContext;
-	
-	private DataCellToJavaConverter<?, ?>[] m_dataCellToJavaConverters;
-	@SuppressWarnings("rawtypes")
-	private JavaToDataCellConverter m_javaToDataCellConverter;
-	
 
-	public SingleExpressionCellFactory(DataColumnSpec inSpec, String expression,
-			Map<String, Integer> columnNameIndexMap, DataType resultType, ExecutionContext exec) {
+	private HashMap<String, DataCellToJavaConverter<?, ?>[]> m_dataCellToJavaConverterMap;
+	@SuppressWarnings("rawtypes")
+	private HashMap<String, JavaToDataCellConverter> m_javaToDataCellConverterMap;
+
+	public MultiExpressionCellFactory(DataColumnSpec[] inSpec, String[] expressions,
+			Map<String, Integer> columnNameIndexMap, DataType[] resultTypes, ExecutionContext exec) {
 		super(inSpec);
 
+		if (resultTypes.length != expressions.length) {
+			throw new IllegalArgumentException(
+					"Number of provided resulting data types is not equal to the number of provided expressions.");
+		} else if (inSpec.length != expressions.length) {
+			throw new IllegalArgumentException(
+					"Number of data column specs is not equal to the number of provided expressions");
+		}
+
 		m_expressionParser = new ExpressionParser();
-		m_expression = expression;
+		m_expressions = expressions;
 		m_columnNameIndexMap = columnNameIndexMap;
 		m_executionContext = exec;
+		m_dataCellToJavaConverterMap = new HashMap<>(expressions.length);
+		m_javaToDataCellConverterMap = new HashMap<>(expressions.length);
 
 		String[] columnNames = new String[columnNameIndexMap.size()];
 		columnNameIndexMap.keySet().toArray(columnNames);
 
-		m_expressionParser.parseExpressions(columnNames, expression);
-		m_expressionParser.checkExpressions(new String[] { expression }, new DataType[] { resultType });
+		m_expressionParser.parseExpressions(columnNames, expressions);
+		m_expressionParser.checkExpressions(expressions, resultTypes);
 	}
 
 	/**
@@ -93,48 +104,58 @@ public class SingleExpressionCellFactory extends SingleCellFactory {
 	 */
 	@SuppressWarnings("unchecked")
 	@Override
-	public DataCell getCell(DataRow row) {
-		String[] usedColumnNames = m_expressionParser.getUsedColumnNames(m_expression);
-		Object[] cellData = new Object[usedColumnNames.length];
+	public DataCell[] getCells(DataRow row) {
+		DataCell[] returnCells = new DataCell[m_expressions.length];
 
-		/* Gets all converters that convert DataCells to Java Objects only once. */
-		if (m_dataCellToJavaConverters == null) {
-			m_dataCellToJavaConverters = new DataCellToJavaConverter[usedColumnNames.length];
+		outerLoop: for (int j = 0; j < returnCells.length; j++) {
+			String expression = m_expressions[j];
 
-			for (int i = 0; i < m_dataCellToJavaConverters.length; i++) {
-				DataCell cell = row.getCell(m_columnNameIndexMap.get(usedColumnNames[i]));
-				m_dataCellToJavaConverters[i] = ExpressionConverterUtils.getKnimeToJavaConverter(cell.getType());
+			String[] usedColumnNames = m_expressionParser.getUsedColumnNames(expression);
+			Object[] cellData = new Object[usedColumnNames.length];
+
+			/* Gets all converters that convert DataCells to Java Objects only once. */
+			if (!m_dataCellToJavaConverterMap.containsKey(expression)) {
+				DataCellToJavaConverter<?, ?>[] dataCellToJavaConverters = new DataCellToJavaConverter[usedColumnNames.length];
+
+				for (int i = 0; i < dataCellToJavaConverters.length; i++) {
+					DataCell cell = row.getCell(m_columnNameIndexMap.get(usedColumnNames[i]));
+					dataCellToJavaConverters[i] = ExpressionConverterUtils.getKnimeToJavaConverter(cell.getType());
+				}
+
+				m_dataCellToJavaConverterMap.put(expression, dataCellToJavaConverters);
 			}
-		}
 
-		for (int i = 0; i < cellData.length; i++) {
-			String column = usedColumnNames[i];
-			DataCell cell = row.getCell(m_columnNameIndexMap.get(column));
+			for (int i = 0; i < cellData.length; i++) {
+				String column = usedColumnNames[i];
+				DataCell cell = row.getCell(m_columnNameIndexMap.get(column));
 
-			if (cell.isMissing()) {
-				return DataType.getMissingCell();
+				if (cell.isMissing()) {
+					returnCells[j] = DataType.getMissingCell();
+					continue outerLoop;
+				}
+
+				try {
+					cellData[i] = m_dataCellToJavaConverterMap.get(expression)[i].convertUnsafe(cell);
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+
+			Object result = m_expressionParser.computeExpression(expression, cellData);
+
+			if (!m_javaToDataCellConverterMap.containsKey(expression)) {
+				m_javaToDataCellConverterMap.put(expression,
+						ExpressionConverterUtils.getJavaToDataCellConverter(result.getClass(), m_executionContext));
 			}
 
 			try {
-				cellData[i] = m_dataCellToJavaConverters[i].convertUnsafe(cell);
+				returnCells[j] = m_javaToDataCellConverterMap.get(expression).convert(result);
 			} catch (Exception e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+				throw new IllegalStateException("Was not able to convert result into DataCell");
 			}
 		}
 
-		Object result = m_expressionParser.computeExpression(m_expression, cellData);
-
-		if (m_javaToDataCellConverter == null) {
-			m_javaToDataCellConverter = ExpressionConverterUtils.getJavaToDataCellConverter(result.getClass(),
-					m_executionContext);
-		}
-
-		try {
-			return m_javaToDataCellConverter.convert(result);
-		} catch (Exception e) {
-			throw new IllegalStateException("Was not able to convert result into DataCell");
-		}
+		return returnCells;
 	}
-
 }

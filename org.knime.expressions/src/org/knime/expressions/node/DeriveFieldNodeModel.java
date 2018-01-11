@@ -51,6 +51,7 @@ package org.knime.expressions.node;
 import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.Set;
 
 import org.knime.core.data.DataCell;
@@ -75,6 +76,7 @@ import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
 import org.knime.core.util.UniqueNameGenerator;
 import org.knime.expressions.util.ExpressionParser;
+import org.knime.expressions.util.MultiExpressionCellFactory;
 import org.knime.expressions.util.SingleExpressionCellFactory;
 
 /**
@@ -187,14 +189,12 @@ public class DeriveFieldNodeModel extends NodeModel {
 		String[][] expressions = m_configuration.getExpressionTable();
 		DataType[] types = m_configuration.getDataTypes();
 
-		DataTableSpecCreator creator = new DataTableSpecCreator(inSpec);
-
 		/*
 		 * Used to replace columns and adding new columns in such a way that the column
 		 * names are still unique.
 		 */
 		UniqueNameGenerator replaceGenerator = new UniqueNameGenerator((Set<String>) null);
-		UniqueNameGenerator nameGenerator = new UniqueNameGenerator(inSpec);
+		UniqueNameGenerator appendGenerator = new UniqueNameGenerator(inSpec);
 
 		HashMap<String, Integer> columnIndexMap = new HashMap<>(inSpec.getColumnNames().length);
 		for (String columnName : inSpec.getColumnNames()) {
@@ -205,8 +205,13 @@ public class DeriveFieldNodeModel extends NodeModel {
 		 * Iterate over all column names that are generated/replaced in the node and
 		 * append/replace them in the current spec.
 		 */
+		LinkedList<String> expressionList = new LinkedList<>();
+		LinkedList<DataColumnSpec> specList = new LinkedList<>();
+		LinkedList<DataType> typeList = new LinkedList<>();
+		
 		for (int i = 0; i < expressions[0].length; i++) {
 			if (columnIndexMap.containsKey(expressions[0][i])) {
+				/* Single cell factory used as we simply replace a column. */
 				int colIndex = columnIndexMap.get(expressions[0][i]);
 
 				rearranger.remove(colIndex);
@@ -214,10 +219,24 @@ public class DeriveFieldNodeModel extends NodeModel {
 						new SingleExpressionCellFactory(replaceGenerator.newColumn(expressions[0][i], types[i]),
 								expressions[1][i], columnIndexMap, types[i], exec));
 			} else {
-				rearranger
-						.append(new SingleExpressionCellFactory(replaceGenerator.newColumn(expressions[0][i], types[i]),
-								expressions[1][i], columnIndexMap, types[i], exec));
+				/* Multi cell factory used as we may append multiple columns. */
+				specList.add(appendGenerator.newColumn(expressions[0][i], types[i]));
+				expressionList.add(expressions[1][i]);
+				typeList.add(types[i]);
 			}
+		}
+		
+		if(!expressionList.isEmpty()) {
+			/* Create the multi cell factory if we don't simply replace already existing columns. */
+			String[] expressionArray = new String[expressionList.size()];
+			DataColumnSpec[] specArray = new DataColumnSpec[specList.size()];
+			DataType[] typeArray = new DataType[typeList.size()];
+			
+			expressionList.toArray(expressionArray);
+			specList.toArray(specArray);
+			typeList.toArray(typeArray);
+			
+			rearranger.append(new MultiExpressionCellFactory(specArray, expressionArray, columnIndexMap, typeArray, exec));
 		}
 
 		return rearranger;

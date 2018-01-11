@@ -46,9 +46,7 @@
  */
 package org.knime.expressions.util;
 
-import java.time.ZonedDateTime;
 import java.util.HashMap;
-import java.util.Map;
 
 import javax.script.Invocable;
 import javax.script.ScriptEngine;
@@ -56,10 +54,7 @@ import javax.script.ScriptException;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.knime.core.data.DataTableSpec;
 import org.knime.core.data.DataType;
-import org.knime.core.data.DataTypeRegistry;
-import org.knime.core.node.workflow.FlowVariable;
 import org.scijava.plugins.scripting.groovy.GroovyScriptLanguage;
 import org.scijava.script.ScriptLanguage;
 
