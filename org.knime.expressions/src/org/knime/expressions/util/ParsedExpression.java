@@ -46,54 +46,112 @@
  */
 package org.knime.expressions.util;
 
+import org.knime.core.node.workflow.FlowVariable;
+import org.knime.ext.sun.nodes.script.expression.Expression;
+
 /**
-*
-* @author Moritz Heine, KNIME GmbH, Konstanz, Germany
-*/
+ *
+ * @author Moritz Heine, KNIME GmbH, Konstanz, Germany
+ */
 public class ParsedExpression {
 	private final String m_originalExpression;
 	private final String m_parsedExpression;
-	private final String[] m_flowVariables;
-	private final String[] m_columns;
-	
-	public ParsedExpression(String originalExpression, String parsedExpression, String[] columns) {
-		this(originalExpression, parsedExpression, columns, null);
+	private final String[] m_originalFlowVariables;
+	private final String[] m_originalColumns;
+	private final String[] m_parsedColumns;
+	private final String[] m_parsedFlowVariables;
+
+	private boolean m_containsROWID;
+	private boolean m_containsROWINDEX;
+	private boolean m_containsROWCOUNT;
+
+	/**
+	 * 
+	 * @param originalExpression
+	 * @param parsedExpression
+	 * @param columns
+	 * @param parsedColumns
+	 */
+	public ParsedExpression(String originalExpression, String parsedExpression, String[] columns,
+			String[] parsedColumns) {
+		this(originalExpression, parsedExpression, columns, null, parsedColumns, null);
 	}
-	
-	public ParsedExpression(String originalExpression, String parsedExpression, String[] columns, String[] flowVariables) {
+
+	public ParsedExpression(String originalExpression, String parsedExpression, String[] columns,
+			String[] parsedColumns, String[] flowVariables, String[] parsedFlowVariables) {
+		this(originalExpression, parsedExpression, columns, parsedColumns, flowVariables, parsedFlowVariables, false,
+				false, false);
+	}
+
+	public ParsedExpression(String originalExpression, String parsedExpression, String[] columns,
+			String[] parsedColumns, String[] flowVariables, String[] parsedFlowVariables, boolean containsROWID,
+			boolean containsROWINDEX, boolean containsROWCOUNT) {
 		m_originalExpression = originalExpression;
 		m_parsedExpression = parsedExpression;
-		m_flowVariables = flowVariables;
-		m_columns = columns;
+		m_originalFlowVariables = flowVariables;
+		m_originalColumns = columns;
+		m_parsedColumns = parsedColumns;
+		m_parsedFlowVariables = parsedFlowVariables;
+		m_containsROWID = containsROWID;
+		m_containsROWINDEX = containsROWINDEX;
+		m_containsROWCOUNT = containsROWCOUNT;
 	}
-	
+
 	/**
 	 * 
-	 * @return {@code true} if the expression uses flow variables, otherwise {@code false}
+	 * @return {@code true} if the expression uses flow variables, otherwise
+	 *         {@code false}
 	 */
 	public boolean usesFlowVariables() {
-		return m_flowVariables != null && m_flowVariables.length > 0;
+		return m_originalFlowVariables != null && m_originalFlowVariables.length > 0;
 	}
-	
+
 	/**
 	 * 
-	 * @return {@code true} if the expression uses specified columns, otherwise {@code false}
+	 * @return {@code true} if {@link Expression#ROWID} is used in this expression.
+	 */
+	public boolean usesROWID() {
+		return m_containsROWID;
+	}
+
+	/**
+	 * 
+	 * @return {@code true} if {@link Expression#ROWINDEX} is used in this
+	 *         expression.
+	 */
+	public boolean usesROWINDEX() {
+		return m_containsROWINDEX;
+	}
+
+	/**
+	 * 
+	 * @return {@code true} if {@link Expression#ROWCOUNT} is used in this
+	 *         expression.
+	 */
+	public boolean usesROWCOUNT() {
+		return m_containsROWCOUNT;
+	}
+
+	/**
+	 * 
+	 * @return {@code true} if the expression uses specified columns, otherwise
+	 *         {@code false}
 	 */
 	public boolean usesColumns() {
-		return m_columns != null && m_columns.length > 0;
+		return m_originalColumns != null && m_originalColumns.length > 0;
 	}
-	
+
 	/**
 	 * 
-	 * @return String containing the expression.
+	 * @return String containing the original, i.e. unparsed, expression.
 	 */
 	public String getOriginalExpression() {
 		return m_originalExpression;
 	}
-	
+
 	/**
 	 * 
-	 * @return String containing the expression.
+	 * @return String containing the parsed expression.
 	 */
 	public String getParsedExpression() {
 		return m_parsedExpression;
@@ -101,18 +159,34 @@ public class ParsedExpression {
 
 	/**
 	 * 
-	 * @return List containing the used flow variables.
+	 * @return The original names of the used {@link FlowVariable}s.
 	 */
-	public String[] getFlowVariables() {
-		return m_flowVariables;
+	public String[] getOriginalFlowVariables() {
+		return m_originalFlowVariables;
 	}
 
 	/**
 	 * 
-	 * @return List containing the used columns.
+	 * @return The original names of the used columns.
 	 */
-	public String[] getColumns() {
-		return m_columns;
+	public String[] getOriginalColumns() {
+		return m_originalColumns;
 	}
-	
+
+	/**
+	 * 
+	 * @return The parsed names of columns, i.e., without special characters.
+	 */
+	public String[] getParsedColumns() {
+		return m_parsedColumns;
+	}
+
+	/**
+	 * 
+	 * @return The parsed names of the {@link FlowVariable}s, i.e., without special
+	 *         characters.
+	 */
+	public String[] getParsedFlowVariables() {
+		return m_parsedFlowVariables;
+	}
 }

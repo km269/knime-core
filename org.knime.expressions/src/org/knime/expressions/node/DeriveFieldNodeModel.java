@@ -91,8 +91,8 @@ public class DeriveFieldNodeModel extends NodeModel {
 	 */
 	@Override
 	protected DataTableSpec[] configure(final DataTableSpec[] inSpecs) throws InvalidSettingsException {
-		if (m_configuration == null) {
-			throw new IllegalStateException("No configuration to determine table specs available.");
+		if (m_configuration == null || m_configuration.getExpressionTable() == null || m_configuration.getExpressionTable().length == 0) {
+			return inSpecs;
 		}
 
 		ColumnRearranger rearranger = createColumnRearranger(inSpecs[0], null);
@@ -176,6 +176,10 @@ public class DeriveFieldNodeModel extends NodeModel {
 	private ColumnRearranger createColumnRearranger(DataTableSpec inSpec, ExecutionContext exec) {
 		ColumnRearranger rearranger = new ColumnRearranger(inSpec);
 
+		if(m_configuration == null) {
+			return rearranger;
+		}
+		
 		String[][] expressions = m_configuration.getExpressionTable();
 		DataType[] types = m_configuration.getDataTypes();
 

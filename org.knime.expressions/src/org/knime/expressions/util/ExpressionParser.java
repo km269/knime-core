@@ -58,6 +58,7 @@ import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.knime.core.data.DataType;
 import org.knime.core.node.workflow.FlowVariable;
+import org.knime.ext.sun.nodes.script.expression.Expression;
 import org.scijava.plugins.scripting.groovy.GroovyScriptLanguage;
 import org.scijava.script.ScriptLanguage;
 
@@ -66,11 +67,18 @@ import org.scijava.script.ScriptLanguage;
  * @author Moritz Heine, KNIME GmbH, Konstanz, Germany
  */
 public class ExpressionParser {
+	private final static String[] SPECIAL_CHARACTERS = new String[] { ",", ".", ";", ":", "-", "#", "'", "+", "*", "~",
+			"`", "´", "=", "}", "]", ")", "[", "(", "/", "{", "&", "%", "$", "\\", "§", "³", "²", "!", "\"", "^", "°",
+			"<", ">", "|" };
 	private final String MAIN_METHOD = "mainStart";
 	private HashMap<String, ParsedExpression> m_expressionMap;
 	private HashMap<String, ScriptEngine> m_expressionInvocableMap;
 
 	/* TODO: Change exceptions to exceptions not parsed and parse exceptions. */
+
+	/*
+	 * TODO: special characters like '.' etc in column name => may yield problems.
+	 */
 
 	/**
 	 * Parses the expression(s) and replaces the usages of column names by their
@@ -130,6 +138,14 @@ public class ExpressionParser {
 				HashMap<String, String> columnMap = new HashMap<>();
 
 				/*
+				 * booleans to determine if ROWID, ROWINDEX, or ROWCOUNT is used in the
+				 * expression.
+				 */
+				boolean containsROWID = false;
+				boolean containsROWINDEX = false;
+				boolean containsROWCOUNT = false;
+
+				/*
 				 * Split expression into lines, so that we are able to parse line by line. This
 				 * makes it easier concerning the handling of the end delimiter (e.g. if its not
 				 * in the same line).
@@ -144,6 +160,19 @@ public class ExpressionParser {
 				for (int i = 0; i < lines.length; i++) {
 					int startIndex = 0;
 					String line = lines[i];
+
+					/* Check if ROWID, ROWINDEX, or ROWCOUNT is used in the expression. */
+					containsROWID = containsROWID
+							|| StringUtils.contains(line, ExpressionCompletionProvider.getEscapeExpressionStartSymbol()
+									+ Expression.ROWID + ExpressionCompletionProvider.getEscapeExpressionEndSymbol());
+
+					containsROWINDEX = containsROWINDEX || StringUtils.contains(line,
+							ExpressionCompletionProvider.getEscapeExpressionStartSymbol() + Expression.ROWINDEX
+									+ ExpressionCompletionProvider.getEscapeExpressionEndSymbol());
+
+					containsROWCOUNT = containsROWCOUNT || StringUtils.contains(line,
+							ExpressionCompletionProvider.getEscapeExpressionStartSymbol() + Expression.ROWCOUNT
+									+ ExpressionCompletionProvider.getEscapeExpressionEndSymbol());
 
 					/* Continue until we've read all start delimiters. */
 					while ((startIndex = StringUtils.indexOf(line, escapeColumnStart, startIndex)) >= 0) {
@@ -233,10 +262,13 @@ public class ExpressionParser {
 				}
 
 				String parsedExpression = StringUtils.replaceEach(expression,
-						ArrayUtils.addAll(foundColumns, foundVariables), ArrayUtils.addAll(columns, flowVariables));
+						ArrayUtils.addAll(foundColumns, foundVariables),
+						ArrayUtils.addAll(replaceSpecialCharacters(columns), replaceSpecialCharacters(flowVariables)));
 
 				tempExpressionMap.put(expression,
-						new ParsedExpression(expression, parsedExpression, columns, flowVariables));
+						new ParsedExpression(expression, parsedExpression, columns, replaceSpecialCharacters(columns),
+								flowVariables, replaceSpecialCharacters(flowVariables), containsROWID, containsROWINDEX,
+								containsROWCOUNT));
 			} else {
 				/* We already parsed the expression so just keep it. */
 				tempExpressionMap.put(expression, m_expressionMap.get(expression));
@@ -291,8 +323,8 @@ public class ExpressionParser {
 				 * Scijava wants '//@INPUT variableName, ...' to define input variables.
 				 * Otherwise during evaluation it doesn't know where they come from.
 				 */
-				String header = "//@INPUT " + ArrayUtils.toString(expression.getColumns(), "")
-						+ ArrayUtils.toString(expression.getFlowVariables(), "") + "\n";
+				String header = "//@INPUT " + ArrayUtils.toString(expression.getParsedColumns(), "")
+						+ ArrayUtils.toString(expression.getParsedFlowVariables(), "") + "\n";
 
 				/*
 				 * Wrap the expression in own 'main' method so that we are able to invoke it
@@ -359,8 +391,9 @@ public class ExpressionParser {
 	 */
 	public Object computeExpression(String expression, Map<String, ?> flowVariableMap, Object... input) {
 		ScriptEngine engine = m_expressionInvocableMap.get(expression);
-		String[] columns = m_expressionMap.get(expression).getColumns();
-		String[] flowVariables = m_expressionMap.get(expression).getFlowVariables();
+		String[] columns = m_expressionMap.get(expression).getParsedColumns();
+		String[] parsedFlowVariables = m_expressionMap.get(expression).getParsedFlowVariables();
+		String[] originalFlowVariables = m_expressionMap.get(expression).getOriginalFlowVariables();
 
 		/*
 		 * Checks if we have the right number of input and flow variables if necessary.
@@ -371,7 +404,7 @@ public class ExpressionParser {
 			throw new IllegalArgumentException("The number of input parameters (" + input.length
 					+ ") does not match the expected number (" + columns.length + ")");
 		}
-		if (flowVariables.length != 0 && flowVariableMap == null) {
+		if (parsedFlowVariables.length != 0 && flowVariableMap == null) {
 			throw new IllegalArgumentException("No flow variables have been provided.");
 		}
 
@@ -380,12 +413,14 @@ public class ExpressionParser {
 			engine.put(columns[i], input[i]);
 		}
 
-		for (String flowVariable : flowVariables) {
+		/* Provide the input for the used flow variables. */
+		for (int i = 0; i < originalFlowVariables.length; i++) {
+			String flowVariable = originalFlowVariables[i];
 			if (!flowVariableMap.containsKey(flowVariable)) {
 				throw new IllegalStateException("The flow variable '" + flowVariable + "' cannot be found.");
 			}
 
-			engine.put(flowVariable, flowVariableMap.get(flowVariable));
+			engine.put(parsedFlowVariables[i], flowVariableMap.get(flowVariable));
 		}
 
 		/*
@@ -413,6 +448,35 @@ public class ExpressionParser {
 			throw new IllegalStateException("Given Expression has not been parsed yet.");
 		}
 
-		return m_expressionMap.get(expression).getColumns();
+		return m_expressionMap.get(expression).getOriginalColumns();
+	}
+
+	/**
+	 * Replaces the special characters in such a way that variable names only
+	 * consists of letters, numbers and "_". Also guarantees that the variable name
+	 * starts with "_x" instead of a number x.
+	 * 
+	 * @param names
+	 *            variable names that shall be pre-processed.
+	 * @return valid variable names where special characters have been replaced.
+	 */
+	private String[] replaceSpecialCharacters(String[] names) {
+		String[] replacedNames = new String[names.length];
+
+		String[] specialCharacterReplacement = new String[SPECIAL_CHARACTERS.length];
+
+		for (int i = 0; i < SPECIAL_CHARACTERS.length; i++) {
+			specialCharacterReplacement[i] = "sc_" + i;
+		}
+
+		for (int i = 0; i < names.length; i++) {
+			replacedNames[i] = StringUtils.replaceEach(names[i], SPECIAL_CHARACTERS, specialCharacterReplacement);
+
+			if (Character.isDigit(replacedNames[i].charAt(0))) {
+				replacedNames[i] = "_" + replacedNames;
+			}
+		}
+
+		return replacedNames;
 	}
 }

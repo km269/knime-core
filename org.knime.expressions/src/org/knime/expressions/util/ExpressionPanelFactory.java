@@ -54,6 +54,6 @@ import org.knime.base.node.util.JSnippetPanel;
  */
 final public class ExpressionPanelFactory {
 	public static JSnippetPanel createExpressionPanel() {
-		return new JSnippetPanel(StringManipulatorProvider.getDefault(), new ExpressionCompletionProvider());
+		return new ExpressionPanel(StringManipulatorProvider.getDefault(), new ExpressionCompletionProvider());
 	}
 }

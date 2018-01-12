@@ -52,6 +52,7 @@ import org.fife.ui.autocomplete.BasicCompletion;
 import org.fife.ui.autocomplete.Completion;
 import org.knime.base.node.util.KnimeCompletionProvider;
 import org.knime.core.node.workflow.FlowVariable;
+import org.knime.ext.sun.nodes.script.expression.Expression;
 
 /**
  *
@@ -59,10 +60,12 @@ import org.knime.core.node.workflow.FlowVariable;
  */
 public class ExpressionCompletionProvider extends KnimeCompletionProvider {
 
-	private static String ESCAPE_COLUMN_START_SYMBOL = "${";
-	private static String ESCAPE_COLUMN_END_SYMBOL = "}";
-	private static String ESCAPE_FLOW_VARIABLE_START_SYMBOL = "$[";
-	private static String ESCAPE_FLOW_VARIABLE_END_SYMBOL = "]";
+	private static final String ESCAPE_COLUMN_START_SYMBOL = "${";
+	private static final String ESCAPE_COLUMN_END_SYMBOL = "}";
+	private static final String ESCAPE_FLOW_VARIABLE_START_SYMBOL = "$[";
+	private static final String ESCAPE_FLOW_VARIABLE_END_SYMBOL = "]";
+	private static final String ESCAPE_EXPRESSION_START_SYMBOL = "$(";
+	private static final String ESCAPE_EXPRESSION_END_SYMBOL = ")";
 
 	/**
 	 * {@inheritDoc}
@@ -98,6 +101,14 @@ public class ExpressionCompletionProvider extends KnimeCompletionProvider {
 	
 	/**
 	 * 
+	 * @return the escape start symbol used for expressions (e.g. {@link Expression#ROWID})
+	 */
+	public static String getEscapeExpressionStartSymbol() {
+		return ESCAPE_EXPRESSION_START_SYMBOL;
+	}
+	
+	/**
+	 * 
 	 * @return the escape end symbol used for column names.
 	 */
 	public static String getEscapeColumnEndSymbol() {
@@ -110,6 +121,14 @@ public class ExpressionCompletionProvider extends KnimeCompletionProvider {
 	 */
 	public static String getEscapeFlowVariableEndSymbol() {
 		return ESCAPE_FLOW_VARIABLE_END_SYMBOL;
+	}
+	
+	/**
+	 * 
+	 * @return the escape start symbol used for expressions (e.g. {@link Expression#ROWID})
+	 */
+	public static String getEscapeExpressionEndSymbol() {
+		return ESCAPE_EXPRESSION_END_SYMBOL;
 	}
 
 	/**
@@ -124,6 +143,8 @@ public class ExpressionCompletionProvider extends KnimeCompletionProvider {
 					ESCAPE_FLOW_VARIABLE_START_SYMBOL + var.getName() + ESCAPE_FLOW_VARIABLE_END_SYMBOL,
 					var.getType().toString(), "The flow variable " + var.getName() + "."));
 		}
+		
+		addCompletions(completionList);
 	}
 
 }
